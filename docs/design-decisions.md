@@ -90,6 +90,14 @@ The design prioritizes robustness and clear buffer ownership over minimum RAM us
 - FRONT and BACK exchange roles only at a defined complete-frame boundary.
 - The output path must never read from a buffer while the capture path modifies it.
 
+### SET — Framebuffers are not used as a frame-rate converter
+
+The two source buffers exist to provide clean ownership, complete-frame presentation and tear-free handoff.
+
+They are **not** intended to absorb a continuous timing mismatch between a free-running DMG and a free-running NTSC output.
+
+The source clock is instead modified so the Game Boy itself produces frames at the cadence required by the RP2C02 output domain.
+
 ## Scaling
 
 ### SET — Full active PPU picture target: 256 x 240
@@ -146,6 +154,32 @@ f_DMG / f_PPU_master = 798 / 4061
 ```
 
 These remain working engineering values until validated on the final hardware implementation.
+
+### SET — Synchronize the source instead of building an asynchronous frame-rate converter
+
+This is a central design choice.
+
+A stock DMG and an NTSC RP2C02 do not naturally complete frames at exactly the same rate. If both were left free-running, the bridge would eventually have to correct their relative drift using a deeper framebuffer/queue, frame insertion or dropping, repeated frames, elastic buffering, or more complicated clock-domain-crossing logic.
+
+The project instead changes the DMG clock slightly so that:
+
+```text
+1 complete DMG frame = 1 complete simplified RP2C02 frame
+```
+
+The design therefore adapts the source machine to the NTSC output cadence instead of compensating after capture.
+
+Expected consequences:
+
+- no generalized asynchronous frame-rate conversion,
+- no periodic frame drop/duplicate mechanism caused by source/output drift,
+- no large timing-absorption framebuffer,
+- no requirement for a separate 256 x 240 synchronization framebuffer,
+- deterministic latency,
+- simpler firmware and hardware state machines,
+- easier measurement and reproduction.
+
+The two small 160 x 144 source framebuffers remain because they solve a different problem: clean capture/display ownership and tear-free frame handoff.
 
 ### OPEN — Clock hardware proposal 1: Si5351A
 
