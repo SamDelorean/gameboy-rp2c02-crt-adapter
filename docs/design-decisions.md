@@ -139,7 +139,50 @@ RP2C02 master: ~21.4772727 MHz
 modified DMG:  ~4.2203555 MHz
 ```
 
+The working frequency relationship is:
+
+```text
+f_DMG / f_PPU_master = 798 / 4061
+```
+
 These remain working engineering values until validated on the final hardware implementation.
+
+### OPEN — Clock hardware proposal 1: Si5351A
+
+The first concrete implementation proposal uses one **Si5351A programmable clock generator** from a common crystal/reference source.
+
+Proposed channel use:
+
+```text
+common reference
+      |
+   Si5351A
+      |
+  +---+---+
+  |       |
+CLK0     CLK1
+  |       |
+  v       v
+PPU      DMG
+~21.4772727 MHz   ~4.2203555 MHz
+```
+
+The common-reference architecture is SET; the exact Si5351A implementation remains OPEN until bench validation.
+
+A **74AHCT125-class buffer/level-interface device** is a current candidate for clock isolation/drive where required, but the exact output-conditioning component is not frozen.
+
+Required validation includes:
+
+- generated frequency accuracy,
+- duty cycle,
+- jitter/phase behavior,
+- voltage compatibility,
+- edge rate and ringing,
+- startup state,
+- loading at the actual DMG and PPU pins,
+- long-duration absence of relative frame drift.
+
+The DMG implementation must explicitly isolate or disable the stock clock source before applying the synchronized external clock; the design must not drive two active clock sources against one another.
 
 ### SET — One source frame per PPU frame
 
