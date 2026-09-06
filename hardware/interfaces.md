@@ -21,6 +21,12 @@ P14
 P15
 ```
 
+`P14` and `P15` must remain explicitly **optional** in the connector/pinout proposal. They are not needed for normal DMG video capture, scaling, PPU output, or manual palette selection.
+
+Their purpose is to preserve a minimal hardware path for the optional passive SGB-lite listener. When connected to an SGB-capable CPU/configuration, the controller may observe command traffic and recover direct SGB palette commands. When absent or left unconnected, the adapter must operate normally.
+
+For version 1 the adapter treats P14/P15 as passive inputs only; no active SGB response or controller-ID emulation is required.
+
 The project also requires a method to provide the modified DMG clock target.
 
 Working target:
@@ -153,11 +159,35 @@ This allows the generated clocks to be compared before and after any buffering/l
 
 ## User interface
 
+Version 1 uses one momentary pushbutton:
+
 ```text
 PALETTE_BUTTON
 ```
 
-No menu display or multi-button UI is planned for version 1.
+No menu display or multi-button UI is planned.
+
+The button cycles the palette-control mode through:
+
+```text
+AUTO/SGB
+manual preset 1
+manual preset 2
+...
+manual preset N
+-> AUTO/SGB
+```
+
+The button is always authoritative. If an SGB-derived palette is currently being displayed, the next press must immediately leave AUTO/SGB and select the first manual preset. While a manual preset is selected, P14/P15 traffic may still be observed/cached by firmware but must not alter the visible palette.
+
+This requirement ensures that adding the optional SGB pins does not reduce the usefulness or predictability of the simple one-switch interface.
+
+Hardware requirements for the button remain intentionally minimal:
+
+- one digital input,
+- defined pull-up or pull-down,
+- firmware debounce,
+- no timing-critical function on the switch path.
 
 ## Electrical validation before PCB freeze
 
@@ -171,6 +201,8 @@ For every signal group, record:
 - pull-up/pull-down behavior,
 - loading constraints,
 - whether direct connection, resistor isolation, buffer, or level shifter is required.
+
+For optional P14/P15 also verify that the listener input does not materially load or disturb normal joypad/SGB signaling.
 
 For the clock paths also record:
 
