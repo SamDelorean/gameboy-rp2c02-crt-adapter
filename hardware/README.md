@@ -24,6 +24,22 @@ No production-ready schematic has been released yet.
 - Treat clone PPU compatibility as a measured property.
 - Do not freeze the level-shifting solution until the actual DMG/controller/PPU voltage requirements are checked.
 
+## Preferred donor Game Boy for experimentation
+
+For early destructive or semi-destructive prototyping, prefer a Game Boy DMG whose LCD assembly is already damaged beyond reasonable repair rather than sacrificing a complete working console.
+
+A suitable donor should still have:
+
+- a functional main logic board and CPU,
+- reliable cartridge execution,
+- intact LCD-interface traces and connector area,
+- observable `LD0`, `LD1`, `CP`, `CPL`, `ST` and `S` signals,
+- a usable clock domain for the planned external clock modification.
+
+LCD glass damage, severe column/row failure, damaged polarizer, or another display fault that makes restoration impractical is acceptable. Damage to the CPU board, LCD signal generation, or the relevant traces may make the unit unsuitable even if the screen itself is already bad.
+
+The project should prioritize reuse of otherwise non-restorable donor hardware whenever practical.
+
 ## Recommended debug points
 
 - GND
