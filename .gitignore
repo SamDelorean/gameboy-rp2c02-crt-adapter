@@ -1,0 +1,51 @@
+# Build outputs
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+compile_commands.json
+*.elf
+*.map
+*.uf2
+*.hex
+*.bin
+
+# Generated dependency / tooling files
+.pioenvs/
+.pio/
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+.vscode/
+.idea/
+
+# Python helper tooling
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# KiCad transient / backup files
+*-backups/
+*.lck
+~*.kicad_sch
+~*.kicad_pcb
+*.bak
+
+# Do NOT ignore KiCad source files:
+# *.kicad_pro
+# *.kicad_sch
+# *.kicad_pcb
+# fp-lib-table
+# sym-lib-table
+
+# Local measurement exports / scratch data
+scratch/
+tmp/
+
+# Keep deliberately released manufacturing outputs under releases/
+# even when they are generated files.
