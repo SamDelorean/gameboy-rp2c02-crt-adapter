@@ -1,0 +1,149 @@
+# Game Boy RP2C02 CRT Adapter
+
+An open hardware/firmware research project for displaying the original Nintendo Game Boy DMG LCD pixel stream on an NTSC CRT by reusing an NES-compatible **RP2C02-class PPU** as raster generator, palette/colorization stage, and composite-video source.
+
+> **Project status:** architecture and component-selection phase. No production-ready schematic or validated firmware release exists yet.
+
+## Concept
+
+```text
+Game Boy DMG / SGB-CPU
+        |
+        | LD0, LD1, CP, CPL, ST, S
+        v
++------------------------------+
+| low-cost digital controller  |
+| capture + ping-pong buffers  |
+| fixed 160x144 -> 256x240     |
+| palette + optional SGB-lite  |
++------------------------------+
+        |
+        | EXT0..EXT3
+        v
+ RP2C02-compatible NTSC PPU
+        |
+        | composite NTSC
+        v
+       CRT
+```
+
+A common frequency reference is planned for both the PPU and a modified Game Boy clock so that the two frame domains remain locked rather than free-running.
+
+## Current architecture decisions
+
+- NTSC **RP2C02 or functionally compatible discrete clone PPU** as the final video stage.
+- Direct capture of the DMG LCD interface: `LD0`, `LD1`, `CP`, `CPL`, `ST`, and `S`.
+- Optional `P14/P15` taps for passive Super Game Boy palette-command listening.
+- Two complete 160x144x2-bit framebuffers (11,520 bytes total) for robust ping-pong operation.
+- Fixed nearest-neighbor scaling from 160x144 to 256x240.
+- Horizontal ratio: `8/5`.
+- Vertical ratio: `5/3`.
+- RP2C02 normal tile/sprite rendering disabled for the first implementation.
+- External palette indices driven through `EXT0..EXT3`.
+- One button cycles curated global four-color palettes.
+- Initial overscan/border behavior: fixed black.
+- No game database, no cartridge identification, and no regional colorization in version 1.
+
+## Working clock targets
+
+- RP2C02 master clock: approximately **21.4772727 MHz**.
+- Modified DMG clock: approximately **4.2203555 MHz**.
+
+Both should be derived from one reference. The final clock-generator IC is still under selection.
+
+## Controller selection
+
+The controller is **not frozen yet**.
+
+The current leading candidate is **RP2040 / Raspberry Pi Pico** because it provides ample SRAM, PIO, DMA, low cost, and easy module-level prototyping. RP2350, ESP32-class MCUs, and suitable FPGAs remain alternatives until deterministic capture/output timing is demonstrated.
+
+See [`docs/controller-selection.md`](docs/controller-selection.md).
+
+## Palette system
+
+The four DMG shades are mapped globally to four PPU colors. The first firmware is expected to offer a small curated set of useful palettes rather than every mathematical combination available from the PPU.
+
+Candidate categories include:
+
+- neutral grayscale,
+- classic DMG green,
+- warm green/yellow,
+- amber,
+- sepia,
+- blue / blue-gray,
+- selected SGB/GBC-inspired mappings.
+
+Palette writes should occur during VBlank.
+
+## Optional SGB-lite mode
+
+If `P14/P15` are connected, firmware may passively decode the direct Super Game Boy palette commands:
+
+- `PAL01`
+- `PAL23`
+- `PAL03`
+- `PAL12`
+
+Received RGB555 colors can be quantized to suitable RP2C02 colors and used as a global four-color palette.
+
+This remains optional: if no valid SGB command is observed, normal manual-palette operation continues.
+
+The initial implementation deliberately does **not** emulate SGB controller-ID behavior, spatial attributes, tile transfers, or graphical borders.
+
+## PPU compatibility philosophy
+
+The project is **not tied to original Ricoh-branded RP2C02 chips**. Discrete NTSC clone PPUs salvaged from Famiclones or obtained as old stock may be usable.
+
+Candidate families such as the **UMC UA6528** should be validated rather than assumed compatible. For this project, a clone must specifically demonstrate:
+
+- usable `EXT0..EXT3` external-input operation,
+- palette RAM behavior compatible with the design,
+- suitable reset/register interface,
+- `/INT` / VBlank operation,
+- compatible NTSC raster timing,
+- stable composite output.
+
+A chip merely being able to run NES software does not prove compatibility with this unusual EXT-input use case. A formal compatibility matrix will be added as devices are tested.
+
+## Explicit non-goals for version 1
+
+- NES CPU emulation.
+- NES background/sprite graphics.
+- Game identification.
+- SGB regional attribute colorization.
+- SGB graphical borders.
+- Full SGB emulation.
+- Internal CRT deflection modification in this project branch.
+
+## Repository structure
+
+```text
+docs/        theory, architecture, timing, palettes, references
+hardware/    interfaces, schematic planning, PCB sources later
+firmware/    firmware architecture and source later
+tests/       bench validation and compatibility procedures
+```
+
+See [`ROADMAP.md`](ROADMAP.md) for the development sequence.
+
+## Safety and vintage-hardware notes
+
+This project interfaces with vintage ICs and modified Game Boy hardware. Always verify voltage domains, loading, clock amplitudes, and pin direction before connection.
+
+On stock NES hardware, the PPU EXT pins are normally grounded; they must not remain hard-grounded when externally driven.
+
+## Licensing
+
+This repository contains hardware, firmware, and documentation, so a mixed-license model is being prepared rather than applying one generic license to everything.
+
+Current proposal:
+
+- hardware: **CERN-OHL-W-2.0**,
+- firmware/software: **MIT**,
+- documentation: **CC BY-SA 4.0**.
+
+The licensing structure will be finalized before the first reproducible hardware release.
+
+## Project language
+
+The canonical technical README is in English for broader collaboration. Spanish documentation may also be maintained where useful.
