@@ -92,6 +92,36 @@ The first concrete clock-generation proposal uses one **Si5351A** programmable c
 
 The architectural requirement is the **common reference**. The Si5351A is the preferred first implementation candidate, not yet a frozen production component.
 
+## Why the Game Boy clock is modified
+
+This block is not only a convenient way to generate two clocks. It is used to simplify the whole adapter architecture.
+
+A stock Game Boy and an NTSC RP2C02 do not naturally complete frames at exactly the same rate. If both remained independent, the bridge would need additional logic and memory to absorb long-term source/output drift.
+
+Instead, the donor Game Boy is intentionally adapted so that its frame period matches the simplified RP2C02 NTSC frame period closely enough for the system to operate as one frequency-related video chain.
+
+Design objective:
+
+```text
+1 DMG source frame
+        =
+1 RP2C02 output frame
+```
+
+This allows the bridge to avoid a generalized asynchronous frame-rate-conversion subsystem.
+
+The two 160 x 144 x 2-bit framebuffers used by the digital controller remain part of the design, but only for clean ping-pong capture/display ownership and tear-free frame handoff. They are not intended to act as a timing reservoir between two free-running video standards.
+
+Accordingly, the shared-clock approach eliminates the need for hardware whose main purpose would otherwise be:
+
+- storing multiple source/output frames to absorb drift,
+- inserting/dropping/repeating frames,
+- elastically changing readout timing,
+- managing a larger asynchronous clock-domain crossing,
+- maintaining a full 256 x 240 synchronization framebuffer.
+
+This is a deliberate hardware trade: a small modification to the donor Game Boy clock is accepted in exchange for fewer parts, less RAM, simpler firmware and deterministic latency.
+
 ### Candidate output conditioning
 
 A small buffer/level-interface device such as a **74AHCT125-class part** is a current candidate for one or both clock branches where TTL-compatible drive, isolation or edge conditioning is useful.
