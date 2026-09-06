@@ -77,6 +77,77 @@ Conceptually:
 
 The purpose is not merely nominal frequency accuracy. A common reference prevents the Game Boy frame domain and the PPU raster domain from accumulating long-term relative drift.
 
+## Design rationale — synchronize the source instead of compensating later
+
+This clock architecture is deliberately used to simplify the entire adapter.
+
+A stock DMG and an NTSC RP2C02 do not naturally run at exactly the same frame rate. If both were allowed to free-run from independent oscillators, the adapter would have to absorb the difference between two asynchronous video domains.
+
+That would normally require some combination of:
+
+- a deeper asynchronous framebuffer or frame queue,
+- frame insertion or frame dropping,
+- repeated frames,
+- variable-rate readout,
+- elastic buffering,
+- more complex clock-domain-crossing logic,
+- logic to detect and correct accumulated phase drift.
+
+The project instead modifies the Game Boy clock slightly so that the DMG finishes one complete source frame in the same interval used by one complete simplified NTSC PPU frame.
+
+The design objective is therefore:
+
+```text
+1 complete DMG frame
+        =
+1 complete RP2C02 output frame
+```
+
+and not merely:
+
+```text
+DMG frame rate ≈ NTSC frame rate
+```
+
+The difference is important. The two devices are intended to be **frequency-locked by construction**, so the bridge does not need to continually reconcile two independent frame cadences.
+
+### Consequence for buffering
+
+The project still uses two small source framebuffers for clean capture/display ownership and to prevent tearing:
+
+```text
+2 x (160 x 144 x 2 bits) = 11,520 bytes
+```
+
+These buffers are not intended to perform frame-rate conversion.
+
+Because the Game Boy has been adapted to the output timing, there is no need for a large generalized video framebuffer whose purpose is to absorb long-term timing mismatch between source and display.
+
+Likewise, the design does not require a full 256 x 240 output framebuffer solely to resynchronize the two systems. The fixed scaler can read the 160 x 144 FRONT buffer and emit the repeated pixel/line pattern directly into the PPU EXT path.
+
+### System-level simplification
+
+This decision trades a small hardware modification to the donor Game Boy for substantial simplification elsewhere:
+
+```text
+modify one clock
+      instead of
+build a full asynchronous frame-rate converter
+```
+
+The expected benefits are:
+
+- fewer parts,
+- less RAM,
+- simpler firmware,
+- simpler timing state machines,
+- deterministic latency,
+- no periodic frame drops or duplicates caused by free-running drift,
+- easier oscilloscope validation,
+- easier reproduction by third parties.
+
+This is one of the central design principles of the project.
+
 ## Clock proposal 1 — Si5351A-based generator
 
 The first concrete hardware proposal is a **Si5351A programmable clock generator** driven from one crystal/reference.
