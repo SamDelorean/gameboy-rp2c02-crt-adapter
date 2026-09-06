@@ -36,13 +36,17 @@ A common frequency reference is planned for both the PPU and a modified Game Boy
 - Optional `P14/P15` taps for passive Super Game Boy palette-command listening.
 - Two complete 160x144x2-bit framebuffers (11,520 bytes total) for robust ping-pong operation.
 - Fixed nearest-neighbor scaling from 160x144 to 256x240.
-- Horizontal ratio: `8/5`.
-- Vertical ratio: `5/3`.
+- Horizontal ratio: `8/5`, implemented by periodic source-pixel repetition.
+- Vertical ratio: `5/3`, implemented by periodic source-line repetition.
+- No required intermediate 256x240 framebuffer in the baseline design.
 - RP2C02 normal tile/sprite rendering disabled for the first implementation.
 - External palette indices driven through `EXT0..EXT3`.
 - One button cycles curated global four-color palettes.
 - Initial overscan/border behavior: fixed black.
 - No game database, no cartridge identification, and no regional colorization in version 1.
+- Early experiments should preferentially use DMG donor units with LCDs that are no longer reasonably repairable, while preserving restorable consoles.
+
+The consolidated decision record is maintained in [`docs/design-decisions.md`](docs/design-decisions.md). The controller-independent software operating principles and exact scaling patterns are documented in [`firmware/architecture.md`](firmware/architecture.md).
 
 ## Working clock targets
 
