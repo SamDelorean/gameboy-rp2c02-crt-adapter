@@ -10,7 +10,9 @@ An earlier accidentally named repository beginning with a leading hyphen is **no
 
 ## Current phase
 
-Architecture and component-selection phase.
+**Architecture fixed at the central-interconnect level; firmware bring-up and pre-bench implementation are in progress.**
+
+The controller is no longer under selection. The current hardware baseline is RP2350 / Raspberry Pi Pico 2, and firmware V0.2 already implements the theoretical Game Boy capture path with PIO + DMA. Bench validation is still required before compatibility claims or PCB freeze.
 
 ## Compatibility target
 
@@ -26,10 +28,16 @@ See [`source-compatibility.md`](source-compatibility.md).
 
 - RP2C02-class NTSC PPU architecture retained.
 - Game Boy DMG / SGB source compatibility is an explicit architecture target.
+- **RP2350 selected as the V1 controller family; Raspberry Pi Pico 2 is the preferred prototype module.**
+- **Arduino IDE + Arduino-Pico selected as the V1 development environment.**
+- PIO + DMA retained for timing-critical Game Boy capture and EXT output.
 - Direct Game Boy LCD/video capture retained.
+- V0.2 theoretical PIO/DMA capture engine implemented; bench timing validation remains pending.
 - Aspect-correct presentation fixed at 234x240 image inside 256x240, with 11-dot side borders.
 - Ping-pong full-frame buffering retained.
 - Common clock reference retained.
+- V0.1 central interconnect fixed around Game Boy DMG/SGB -> Pico 2/RP2350 -> RP2C02.
+- Minimized write-only PPU host interface retained: R/W fixed LOW, A1/A2 tied, EXT0..EXT3 shared with D0..D3, passive reset.
 - Manual global palettes retained.
 - Optional passive SGB-lite retained.
 - One-button manual override of SGB-derived palettes retained.
@@ -38,15 +46,17 @@ See [`source-compatibility.md`](source-compatibility.md).
 
 ## Decisions still open
 
-- final digital controller,
-- final common clock-generator IC,
-- final voltage-level/interface components,
-- exact DMG clock injection implementation,
-- exact SGB/SGB-CPU source configurations and clock/signal-access method to validate,
+- final common clock-generator IC and its measured output conditioning,
+- final voltage-level/interface components where bench measurements require them,
+- exact physical DMG clock cut/injection point for the selected donor revision,
+- exact SGB/SGB-CPU source configurations and signal-access points to validate,
 - exact prototype PPU revision/device,
+- final EXT-output PIO/DMA timing implementation after RP2C02 timing validation,
 - final palette preset count/table,
 - final mixed-license declaration,
 - production schematic and PCB.
+
+The SGB external-clock replacement principle itself is not open; only its exact board-revision implementation and electrical validation remain to be documented.
 
 ## Publication rule
 
