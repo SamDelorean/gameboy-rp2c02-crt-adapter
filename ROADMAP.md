@@ -15,20 +15,23 @@ SGB-specific palette signaling is an additional optional layer:
 
 Every major hardware, firmware and validation phase below should therefore consider both DMG and SGB-capable source configurations where practical.
 
-## Phase 1 — Freeze the digital controller
+## Phase 1 — Digital controller — COMPLETE AT DESIGN LEVEL
 
-Select the final MCU/FPGA only after demonstrating:
+**V1 decision: RP2350, with Raspberry Pi Pico 2 as the preferred prototype/module implementation.**
 
-- deterministic Game Boy LCD capture,
-- deterministic RP2C02 EXT output,
-- sufficient GPIO for the base DMG path plus optional `P14/P15`,
-- at least 11.25 KiB of framebuffer RAM,
-- practical low-cost prototyping,
-- no pixel-rate interrupt bit-banging.
+The selected baseline satisfies:
 
-**Current leading candidate:** RP2040 / Raspberry Pi Pico.
+- sufficient SRAM for the two 160x144x2-bit source framebuffers;
+- enough GPIO for the optimized direct DMG/SGB interface;
+- PIO + DMA for deterministic capture/output;
+- 5 V-tolerant digital inputs on the appropriate RP2350 GPIO, reducing blanket level-shifting hardware;
+- simple Arduino-Pico/USB development workflow.
 
-## Phase 2 — Freeze the common clock source
+The earlier RP2040 / Raspberry Pi Pico candidate is retained only as historical comparison and is not an open design choice.
+
+Bench validation of pin loading, voltage thresholds and timing is still required before PCB freeze.
+
+## Phase 2 — Freeze the common clock source — OPEN
 
 Working targets:
 
@@ -37,9 +40,11 @@ Working targets:
 
 Both clocks should be derived from one reference to eliminate long-term relative drift.
 
-The final clock-interface design must document the injection/isolation method for the actual DMG and any SGB source hardware used for validation.
+The common-reference architecture is SET. Si5351A remains proposal 1; the exact generator IC and output conditioning remain open pending frequency/jitter/edge-quality validation.
 
-## Phase 3 — Prove the PPU EXT concept on the bench
+The final clock-interface design must document the physical injection/isolation point for the actual DMG and each SGB source hardware revision used for validation. SGB external clock replacement itself is already treated as an established project design principle.
+
+## Phase 3 — Prove the PPU EXT concept on the bench — PENDING BENCH
 
 Before integrating Game Boy hardware:
 
@@ -50,11 +55,15 @@ Before integrating Game Boy hardware:
 - verify `/INT` / VBlank behavior,
 - document oscilloscope captures and CRT/capture images.
 
+The V0.2 firmware already provides the low-rate PPU initialization/palette path and static EXT test state needed for this bring-up.
+
 This test will become the basis of the clone-PPU compatibility matrix.
 
-## Phase 4 — Capture the Game Boy LCD stream
+## Phase 4 — Capture the Game Boy LCD stream — THEORETICAL V0.2 IMPLEMENTED / BENCH PENDING
 
-Validate the actual electrical/timing behavior of:
+Firmware V0.2 now contains a PIO + DMA capture engine based on documented DMG LCD behavior. It reconstructs the 160x144x2-bit source frame into BACK while preserving FRONT/BACK ownership.
+
+Bench work must validate the actual electrical/timing behavior of:
 
 - `LD0`
 - `LD1`
@@ -63,22 +72,24 @@ Validate the actual electrical/timing behavior of:
 - `ST`
 - `S`
 
-Confirm polarity, sample edge, active-pixel window, line boundary and frame boundary on real DMG hardware first.
+Confirm polarity, sampling phase, active-pixel behavior, line boundary, frame boundary, fine-scroll/suppressed-clock cases and electrical levels on real DMG hardware first.
 
 Then verify that an available SGB/SGB-CPU-compatible source exposes an equivalent usable capture path, documenting any pinout, loading, level or timing differences rather than assuming identity.
 
-## Phase 5 — Implement ping-pong buffering
+See `firmware/capture-engine.md`.
 
-Store complete 160x144x2-bit frames:
+## Phase 5 — Ping-pong buffering — IMPLEMENTED IN V0.2 / VALIDATION PENDING
+
+The firmware allocates complete 160x144x2-bit FRONT/BACK frames:
 
 - 5,760 bytes per frame,
 - 11,520 bytes total for two buffers.
 
-Prioritize robust frame presentation over minimum memory use.
+A BACK buffer awaiting PPU VBlank presentation is never overwritten; a newer raw capture is dropped instead.
 
-The framebuffer format and capture/output pipeline must remain source-agnostic so the same code path can serve DMG and SGB-compatible sources.
+The framebuffer format and capture/output pipeline remain source-agnostic so the same code path can serve DMG and validated SGB-compatible sources.
 
-## Phase 6 — Implement aspect-correct fixed scaling
+## Phase 6 — Aspect-correct fixed scaling — ALGORITHM/TABLES IMPLEMENTED / EXT ENGINE PENDING
 
 Baseline presentation:
 
@@ -96,9 +107,9 @@ Scaling rules:
 - no interpolation,
 - no tearing.
 
-The scaler operates only on the common 160x144 Game Boy shade image and therefore does not depend on whether the source is DMG or SGB-capable hardware.
+Firmware V0.2 generates and self-checks the repetition tables. The remaining work is to consume FRONT through the deterministic EXT PIO/DMA output engine.
 
-## Phase 7 — Add curated palette presets and border generator
+## Phase 7 — Add curated palette presets and border generator — PARTIAL
 
 - one momentary button,
 - initially 8 or 16 useful global palettes,
@@ -106,7 +117,9 @@ The scaler operates only on the common 160x144 Game Boy shade image and therefor
 - border generator integrated with the output path,
 - fixed black 11-dot side borders for the first release.
 
-The border block should remain logically independent so later simple color/effect experiments do not alter scaling or framebuffer logic.
+The button state machine and provisional bring-up palettes exist in firmware V0.2. Final curated palette values and the deterministic EXT/border output engine remain pending.
+
+The border block remains logically independent so later simple color/effect experiments do not alter scaling or framebuffer logic.
 
 ## Phase 8 — Validate SGB compatibility and add SGB-lite listening
 
@@ -123,7 +136,7 @@ Tasks:
 
 - document the SGB source hardware/configuration used,
 - verify the Game Boy video capture path,
-- verify synchronized clock operation or document required differences,
+- verify synchronized clock operation and exact physical injection point,
 - capture raw `P14/P15` traffic,
 - decode supported packets,
 - convert RGB555 colors to a suitable RP2C02 palette,
@@ -139,7 +152,7 @@ Publish and review:
 - power/decoupling,
 - Game Boy DMG / SGB source input conditioning,
 - common clock generation,
-- controller/programming,
+- RP2350/Pico 2 controller/programming,
 - RP2C02 control bus,
 - `EXT0..EXT3`,
 - composite output,
@@ -147,7 +160,7 @@ Publish and review:
 - palette button,
 - debug/test points.
 
-The schematic and connector tables must label which signals are required for the common DMG/SGB video path and which are optional SGB-lite signals.
+The V0.1 central interconnect is already documented; this phase closes the remaining clock, power and output sheets and converts the design to production-ready KiCad sources.
 
 ## Phase 10 — Prototype and validate
 
@@ -173,7 +186,7 @@ Release:
 - BOM,
 - fabrication outputs,
 - firmware source and binaries,
-- programming instructions,
+- Arduino-Pico programming instructions,
 - DMG installation guide,
 - SGB/SGB-CPU installation or signal-access notes for validated configurations,
 - validation procedure,
