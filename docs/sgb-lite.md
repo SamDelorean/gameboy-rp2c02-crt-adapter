@@ -1,19 +1,56 @@
-# Optional SGB-lite Palette Listener
+# Super Game Boy Compatibility and Optional SGB-lite Palette Listener
 
-## Goal
+## Compatibility goal
 
-Recover a useful subset of Super Game Boy palette information without turning the project into a full SGB emulator.
+The project is intended for **Game Boy DMG / SGB** use.
 
-## Optional physical inputs
+That compatibility has two distinct layers which must not be confused:
+
+1. **common video-path compatibility** — use the same Game Boy capture, framebuffer, aspect-correct scaler, palette and RP2C02 output architecture with an SGB/SGB-CPU-compatible video source when the required signals are accessible;
+2. **optional SGB-lite palette recovery** — passively observe SGB command traffic on `P14/P15` and recover a limited subset of palette information.
+
+The first goal is part of the core compatibility plan. The second is an optional enhancement.
+
+## Common SGB video path
+
+For an SGB/SGB-CPU source configuration, the project should validate and document:
+
+- access to the equivalent 160x144 Game Boy pixel/timing stream;
+- signal voltage levels and loading;
+- active pixel/line/frame timing;
+- synchronized clock access/injection;
+- any adapter wiring or buffering differences from DMG.
+
+Once a valid 160x144x2-bit frame has been reconstructed, the downstream path should be identical to DMG:
+
+```text
+Game Boy DMG / SGB source
+        |
+160x144x2-bit framebuffer
+        |
+aspect-correct 160 -> 234 / 144 -> 240 scaler
+        |
+border generator
+        |
+palette mapping
+        |
+EXT0..EXT3
+        |
+RP2C02 composite NTSC
+```
+
+Do not claim universal electrical compatibility with every SGB revision/configuration until measured.
+
+## Optional physical inputs for SGB-lite
 
 - `P14`
 - `P15`
 
-These are **optional taps**. A normal DMG installation must operate fully without them.
+These are **optional taps**. A DMG or SGB installation must be able to produce normal video without them.
 
-They are included in the proposed connector/interface only to preserve a low-cost path for SGB-lite functionality. Leaving them unconnected must not disable capture, scaling, manual palette selection, or normal composite output.
+They are included in the proposed connector/interface only to preserve a low-cost path for SGB-lite functionality. Leaving them unconnected must not disable capture, scaling, manual palette selection or composite output.
 
-For SGB-CPU or other compatible installations, P14/P15 may be observed passively to recover SGB command traffic.
+For SGB/SGB-CPU-compatible installations, P14/P15 may be observed passively to recover SGB command traffic.
 
 ## Initial supported direct palette commands
 
@@ -70,15 +107,19 @@ This gives SGB-aware software an automatic palette path without sacrificing the 
 
 ## Important limitation
 
-A passive listener cannot force every SGB-enhanced game to transmit SGB commands on every Game Boy configuration.
+A passive listener cannot force every SGB-enhanced game to transmit SGB commands on every configuration.
 
-Some software may first attempt to detect SGB-specific behavior before using its SGB features. Therefore the optional listener is best understood as opportunistic compatibility rather than universal automatic SGB support.
+Some software may first attempt to detect SGB-specific behavior before using its SGB features. Therefore passive SGB-lite is opportunistic compatibility, not universal automatic SGB palette support.
 
-## SGB-CPU installations
+This limitation does **not** invalidate the broader goal of using an SGB-compatible source for the normal Game Boy video path.
 
-The optional interface is intentionally retained for unusual Game Boy builds using an SGB CPU or other configurations where SGB signaling may be naturally present.
+## SGB/SGB-CPU installations
 
-P14/P15 are inputs to the adapter only in the passive SGB-lite implementation. The first version does not drive or emulate them.
+The optional interface is intentionally retained for unusual Game Boy builds, original/modified SGB hardware, SGB CPU configurations or other systems where compatible Game Boy video and SGB signaling are accessible.
+
+P14/P15 are inputs to the adapter only in the passive SGB-lite implementation. Version 1 does not drive or emulate them.
+
+Each tested SGB installation should record exact hardware/revision and signal access in the compatibility/validation documentation.
 
 ## Deliberate non-goals for version 1
 
