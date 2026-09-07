@@ -23,7 +23,7 @@ complete 160 x 144 source framebuffer
 aspect-correct repetition scaler
     |
     v
-pillarbox insertion + palette index
+border/frame generator + palette index
     |
     v
 EXT0..EXT3
@@ -39,6 +39,7 @@ ppu_init
 dmg_capture
 frame_buffers
 fixed_scaler
+border_generator
 ppu_ext_output
 palette
 sgb_listener       (optional)
@@ -105,9 +106,11 @@ Version 1 does **not** stretch the 160 x 144 Game Boy image across the complete 
 The selected presentation is:
 
 ```text
-11 black | 234-dot Game Boy picture | 11 black
+11 border | 234-dot Game Boy picture | 11 border
           x 240 lines high
 ```
+
+In version 1 the two border regions are fixed black.
 
 The Game Boy image therefore fills the raster height while preserving its intended geometry much more closely on an NTSC CRT.
 
@@ -187,14 +190,14 @@ The resulting line contains:
 
 Since `gcd(160,234)=2`, an implementation may alternatively store a fixed 80-source-pixel -> 117-output-dot repetition pattern and use it twice per line.
 
-## 8. Pillarbox generation
+## 8. Border / frame generator
 
 Each visible PPU line is generated as:
 
 ```text
-11 black dots
+11 border dots
 234 scaled image dots
-11 black dots
+11 border dots
 ```
 
 Total:
@@ -203,15 +206,29 @@ Total:
 11 + 234 + 11 = 256
 ```
 
-The black side bars are generated directly by the output state machine. They are **not** written into the Game Boy framebuffer.
+The two side regions are produced by the **border/frame generator**, not by modifying the Game Boy image and not by storing extra pixels in FRONT/BACK.
 
-The black value should use a known safe PPU palette/index strategy and should not change merely because the user selects another Game Boy palette.
+Version 1 fixes:
+
+```text
+border_mode = fixed black
+```
+
+The important architectural separation is:
+
+- the scaler always maps 160 source pixels to 234 image dots;
+- the border generator owns the remaining 22 raster positions;
+- the framebuffer stores neither borders nor border color/effects.
+
+This keeps open a low-cost future extension in which the border generator could emit a selected color, a color related to the active palette, or another simple deterministic effect. Such a future extension must not require changing the scaler or introducing a general graphics layer.
+
+No border-selection UI is required in version 1.
 
 ## 9. No scaled framebuffer is required
 
 Version 1 stores only the original 160 x 144 source frame.
 
-Neither a 234 x 240 framebuffer nor a 256 x 240 framebuffer is required. Scaling and pillarbox insertion happen while FRONT is read for output.
+Neither a 234 x 240 framebuffer nor a 256 x 240 framebuffer is required. Scaling and border generation happen while FRONT is read for output.
 
 Advantages:
 
@@ -220,6 +237,7 @@ Advantages:
 - less memory use;
 - deterministic mapping;
 - palette changes never rewrite pixels;
+- border changes, if introduced later, do not rewrite pixels;
 - the framebuffer remains a faithful copy of the original DMG shade data.
 
 A scaled framebuffer may be reconsidered only if measurements on the final controller show a compelling implementation benefit.
@@ -241,7 +259,8 @@ Therefore:
 
 - scaling duplicates shade indices, not colors;
 - changing the palette does not touch FRONT/BACK;
-- manual and SGB-derived palettes use the same output path.
+- manual and SGB-derived palettes use the same output path;
+- the border generator may remain independent of the four Game Boy shades.
 
 The exact EXT coding remains isolated inside the output module.
 
@@ -361,10 +380,10 @@ Recommended initial sequence:
 1. Place GPIO in safe states.
 2. Hold the PPU in reset.
 3. Configure/start the common clock system.
-4. Initialize capture and output peripherals.
+4. Initialize capture, scaler, border generator and output peripherals.
 5. Initialize framebuffer ownership.
 6. Release and initialize the PPU.
-7. Load a known safe default palette and black pillarbox value.
+7. Load a known safe default Game Boy palette and fixed-black border value.
 8. Capture one complete valid DMG frame into BACK.
 9. Promote it to FRONT at the defined boundary.
 10. Start normal EXT output.
@@ -391,7 +410,8 @@ Maintain reproducible bench modes for:
 - checkerboard;
 - horizontal and vertical line patterns;
 - framebuffer address/count pattern;
-- black-bar geometry markers;
+- border geometry markers;
+- explicit border-generator test color;
 - VBlank indicator;
 - capture frame counter;
 - optional timing GPIO markers.
@@ -407,15 +427,16 @@ Unless a documented design revision supersedes them:
 3. Never modify FRONT while it is being displayed.
 4. Preserve the Game Boy image aspect rather than stretching it to the full 256-dot width.
 5. Present the image as 234 x 240 inside the 256 x 240 raster.
-6. Generate 11 black dots on each side.
-7. Scale vertically by exact 3-source-lines -> 5-output-lines repetition.
-8. Scale horizontally by deterministic 160 -> 234 one-or-two-times pixel repetition.
-9. Do not require a 234 x 240 or 256 x 240 intermediate framebuffer.
-10. Keep pixel storage independent of palette/color values.
-11. Drive EXT with hardware-assisted deterministic I/O.
-12. Perform palette changes during a safe PPU interval.
-13. Keep SGB support optional and subordinate to manual user control.
-14. Prefer transparent integer state machines over generalized graphics algorithms.
+6. Reserve 11 output dots on each side for the border/frame generator; version 1 emits fixed black.
+7. Keep border generation logically separate from scaling and source framebuffer storage.
+8. Scale vertically by exact 3-source-lines -> 5-output-lines repetition.
+9. Scale horizontally by deterministic 160 -> 234 one-or-two-times pixel repetition.
+10. Do not require a 234 x 240 or 256 x 240 intermediate framebuffer.
+11. Keep pixel storage independent of palette/color values.
+12. Drive EXT with hardware-assisted deterministic I/O.
+13. Perform palette changes during a safe PPU interval.
+14. Keep SGB support optional and subordinate to manual user control.
+15. Prefer transparent integer state machines over generalized graphics algorithms.
 
 ## 20. Rationale
 
@@ -423,7 +444,8 @@ The chosen architecture is intentionally simple:
 
 - preserve the original Game Boy geometry;
 - fill the CRT vertically;
-- tolerate the remaining width with small black pillarbox bars;
+- use the remaining width as a dedicated border/frame region;
+- keep that region black in version 1 while preserving a clean future hook for simple cosmetic behavior;
 - avoid interpolation and floating point;
 - avoid a general-purpose video scaler;
 - avoid a scaled framebuffer;
