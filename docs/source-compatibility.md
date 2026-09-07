@@ -40,12 +40,38 @@ An SGB-capable source may additionally expose `P14/P15` so firmware can passivel
 
 This is optional. Failure to receive SGB palette traffic must never break the common video path or manual palette operation.
 
+## Established SGB clock-modification approach
+
+For project purposes, external clock injection into a Super Game Boy is treated as an **established modification technique**, based on prior hands-on implementation experience within the project.
+
+The design principle is:
+
+1. identify the clock/reference path that the SGB normally receives from the Super Nintendo host;
+2. interrupt or isolate that original clock path;
+3. inject the desired external Game Boy-domain clock at the SGB-side clock input instead;
+4. ensure that the original and injected sources are never actively driving the same node at the same time.
+
+This same class of modification has historically been used to run a Super Game Boy at native Game Boy speed by replacing the host-derived clock reference.
+
+For this project, the method is repurposed so the SGB can receive the synchronized `GB_SYNC_CLK` derived from the common adapter reference.
+
+Therefore **clock injection feasibility is not considered an open architectural question for SGB compatibility**. What remains implementation-specific is only:
+
+- exact cut/isolation point for the selected SGB board revision;
+- exact injection pad/pin;
+- voltage and input-threshold verification;
+- buffering/series damping if required;
+- duty cycle and waveform quality at the receiving IC;
+- confirmation that no host-derived clock remains connected in contention.
+
+These installation details must be recorded for every validated SGB revision, but they do not change the common clock architecture.
+
 ## Planned source matrix
 
 | Source/configuration | Common video path | Clock access | P14/P15 | SGB-lite | Status |
 |---|---|---|---|---|---|
 | Game Boy DMG | expected reference implementation | external synchronized clock planned | optional | opportunistic if present | planned / first validation target |
-| Super Game Boy / SGB-CPU configuration | intended | must be documented per hardware | intended where accessible | intended passive support | planned / not yet electrically validated |
+| Super Game Boy / SGB-CPU configuration | intended | established external-injection method; board-specific point to document | intended where accessible | intended passive support | planned / not yet electrically validated |
 
 Add exact board revisions/configurations as real hardware is tested.
 
