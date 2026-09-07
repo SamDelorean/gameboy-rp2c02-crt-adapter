@@ -1,12 +1,13 @@
 # Hardware
 
-A first **connection-level schematic basis** now exists for the central V1 signal path:
+A first **connection-level schematic basis** now exists for the central V1 signal path, and the common clock subsystem has now been developed to a first schematic-level proposal:
 
 - [`schematic-v0.1.md`](schematic-v0.1.md) — Game Boy DMG / SGB → Raspberry Pi Pico 2 → RP2C02 interconnect schematic;
 - [`netlist-v0.1.csv`](netlist-v0.1.csv) — exact V0.1 connectivity table suitable for later KiCad capture/checking;
-- [`interfaces.md`](interfaces.md) — broader signal/electrical contract and validation notes.
+- [`interfaces.md`](interfaces.md) — broader signal/electrical contract and validation notes;
+- [`clock-generator-v0.1.md`](clock-generator-v0.1.md) — separate Si5351A 10-MSOP common-clock generator proposal with exact 27 MHz frequency plan.
 
-This is **not yet a production-ready PCB schematic**. It deliberately freezes the central interconnection while keeping clock generation, power implementation and downstream analog/video output as separate subsystems.
+This is **not yet a production-ready PCB schematic**. The central interconnection is defined; the clock generator is now a concrete proposal but still requires electrical/jitter validation, while final power implementation and downstream analog/video output remain separate subsystems.
 
 ## Compatibility target
 
@@ -18,7 +19,7 @@ Do not assume every SGB implementation is electrically identical to a DMG. Any S
 
 ## V0.1 schematic partition
 
-The first schematic sheet is intentionally limited to:
+The first central schematic sheet is intentionally limited to:
 
 ```text
 Game Boy DMG / SGB source taps
@@ -30,18 +31,34 @@ Raspberry Pi Pico 2 / RP2350
 RP2C02-compatible NTSC PPU
 ```
 
-The following are represented only by off-sheet flags/interfaces:
+The following are represented by off-sheet flags/interfaces:
 
 - `PPU_CLK_IN` → PPU clock input, target ~21.4772727 MHz NTSC;
 - `GB_CLK_IN` → synchronized Game Boy/SGB clock-injection point, current target ~4.2203555 MHz;
 - `PPU_VIDEO_RAW` ← RP2C02 pin 21 `VOUT`;
 - PPU 5 V supply and Pico 2 power input.
 
-This separation is deliberate. The clock generator will be developed as its own circuit. The raw PPU video node will feed a later, independent output stage.
+The clock generator is developed independently in `clock-generator-v0.1.md` and feeds the first two nets. The raw PPU video node will feed a later, independent output stage.
+
+## Clock-generator V0.1
+
+The current clock proposal uses a hand-solderable **Si5351A-B-GT 10-MSOP** with a qualified 27 MHz / 8 pF crystal.
+
+The core generator needs only:
+
+- one Si5351A;
+- one 27 MHz crystal;
+- two 100 nF decoupling capacitors;
+- two I2C pull-up resistors;
+- optional 0-ohm/series-damping output footprints.
+
+Both target clocks are derived from PLLA using a VCO near 859.090909 MHz. `CLK0` uses an integer divide-by-40 for the RP2C02 master clock, while `CLK1` uses the exact fractional ratio needed to preserve `f_GB / f_PPU = 798/4061`.
+
+A 5 V `74AHCT125`-class buffer remains optional until bench measurements show whether direct 3.3 V Si5351 outputs are sufficient for the selected PPU and Game Boy/SGB clock inputs.
 
 ## Video-output scope
 
-The V0.1 sheet ends at `PPU_VIDEO_RAW`.
+The V0.1 central sheet ends at `PPU_VIDEO_RAW`.
 
 The RP2C02 raw composite output is not treated as a finished 75-ohm television output. A minimal stock-style composite amplifier may be documented later as a separate sheet.
 
@@ -50,7 +67,7 @@ Other existing NES video modifications — for example S-Video-oriented, HDMI-or
 ## Planned schematic sheets / blocks
 
 1. **Central interconnect V0.1** — DMG/SGB taps, Pico 2, RP2C02, passives, button, raw video handoff. **Defined.**
-2. **Clock generation** — common reference and separate `PPU_CLK_IN` / `GB_CLK_IN` outputs. **Separate / pending.**
+2. **Clock generation V0.1** — Si5351A 10-MSOP, 27 MHz crystal, exact two-output frequency plan. **Defined as proposal / bench validation pending.**
 3. **Power** — final 5 V / Pico VSYS sourcing, filtering and sequencing. **Pending.**
 4. **Video output** — raw PPU VOUT buffering / 75-ohm composite stage or other optional downstream implementation. **Pending.**
 5. Optional prototype/debug/test-point sheet or carrier-board details as required.
@@ -66,7 +83,7 @@ Other existing NES video modifications — for example S-Video-oriented, HDMI-or
 - Reserve optional `P14/P15` without making them mandatory for normal operation.
 - Treat DMG and SGB compatibility as measured properties of the source interface.
 - Treat clone PPU compatibility as a measured property.
-- Add buffers/level shifting only where actual measurements show they are required.
+- Add clock buffers/level shifting only where actual measurements show they are required.
 
 ## Preferred donor Game Boy for experimentation
 
@@ -103,6 +120,8 @@ The baseline board should, where practical, expose enough test pads/header optio
 - PPU supply
 - Game Boy frame/line timing reference
 - PPU `/INT`
+- `PPU_CLK_RAW`
+- `GB_CLK_RAW`
 - `PPU_CLK_IN`
 - `GB_CLK_IN`
 - `EXT0`
