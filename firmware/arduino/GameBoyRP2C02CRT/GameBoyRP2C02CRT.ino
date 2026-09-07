@@ -1,16 +1,18 @@
 #include <Arduino.h>
 
+#include "gb_capture_engine.h"
+
 /*
  * Game Boy DMG / SGB -> RP2350/Pico 2 -> RP2C02 CRT Adapter
- * Firmware V0.1
+ * Firmware V0.2
  *
  * Development environment: Arduino IDE + Arduino-Pico core
  * Target board: Raspberry Pi Pico 2 (RP2350, ARM mode)
  *
- * V0.1 intentionally implements the parts already fixed by the hardware/design
- * documents and leaves the timing-critical PIO/DMA capture/output engines as
- * explicit stubs until bench measurements freeze the exact source sampling edge
- * and RP2C02 EXT timing.
+ * V0.2 adds the first theoretical PIO + DMA Game Boy LCD capture engine.
+ * The EXT output engine remains a bench-bring-up stub until PPU-side timing is
+ * frozen. Capture timing assumptions are documented in gb_capture_pio.h and
+ * must still be confirmed on real DMG/SGB hardware before PCB/firmware freeze.
  */
 
 namespace hw {
@@ -176,8 +178,8 @@ static inline void setExtIndex(uint8_t index) {
   digitalWrite(hw::EXT3_D3, (extHoldIndex >> 3) & 1u);
 }
 
-// Hooks used by the low-rate PPU host bus. In V0.1 no PIO output engine owns
-// GP6..GP9 yet. A later revision will pause/resume the EXT PIO state machine here.
+// Hooks used by the low-rate PPU host bus. No PIO output engine owns GP6..GP9
+// yet. A later revision will pause/resume the EXT PIO state machine here.
 static inline void videoOutputPauseForPpuBus() {}
 static inline void videoOutputResumeAfterPpuBus() { setExtIndex(extHoldIndex); }
 
@@ -193,8 +195,6 @@ static void setPpuDataByte(uint8_t value) {
 }
 
 static void ppuWriteRegister(uint8_t reg, uint8_t value) {
-  // Hardware V0.1 ties PPU R/W permanently LOW.
-  // A1 and A2 are physically tied and are HIGH only for $2006/$2007.
   const bool pairHigh = (reg == ppu::REG_ADDR || reg == ppu::REG_DATA);
   const bool a0High = (reg & 0x01u) != 0;
 
@@ -231,33 +231,27 @@ static const Palette4 &activePalette() {
 static void ppuLoadActivePalette() {
   const Palette4 &pal = activePalette();
 
-  // EXT input selects the low four palette-address bits while rendering is off.
-  // Fill $3F00..$3F03 with Game Boy shades and $3F04..$3F0F with safe black.
   ppuSetAddress(0x3F00);
   for (uint8_t i = 0; i < 16; ++i) {
     const uint8_t value = (i < 4) ? pal.color[i] : 0x0F;
     ppuWriteRegister(ppu::REG_DATA, value);
   }
 
-  // Important: leave v outside palette RAM, otherwise rendering-disabled PPU
-  // can display the addressed palette entry instead of EXT input.
+  // Leave v outside palette RAM so rendering-disabled output is not forced to
+  // the currently addressed palette entry instead of the EXT input.
   ppuSetAddress(0x0000);
   setExtIndex(extHoldIndex);
 }
 
 static void ppuInitialize() {
-  // /RESET is passive-high in the V0.1 schematic. Wait beyond the documented
-  // power-up write-inhibit interval before relying on control/address writes.
   delay(ppu::WARMUP_MS);
 
-  ppuWriteRegister(ppu::REG_CTRL, ppu::CTRL_EXT_INPUT);  // NMI off, EXT input
-  ppuWriteRegister(ppu::REG_MASK, ppu::MASK_RENDER_OFF); // force blanking / EXT picture
+  ppuWriteRegister(ppu::REG_CTRL, ppu::CTRL_EXT_INPUT);
+  ppuWriteRegister(ppu::REG_MASK, ppu::MASK_RENDER_OFF);
 
   ppuLoadActivePalette();
   ppuSetAddress(0x0000);
 
-  // Enable NMI while keeping bit 6 clear so EXT remains input.
-  // If this happens during an already-active VBlank, one immediate interrupt is harmless.
   ppuWriteRegister(ppu::REG_CTRL, ppu::CTRL_NMI_ENABLE | ppu::CTRL_EXT_INPUT);
 }
 
@@ -269,7 +263,6 @@ static void configurePins() {
   pinMode(hw::ST,  INPUT);
   pinMode(hw::S,   INPUT);
 
-  // Optional passive SGB-lite inputs. No internal pulls by design.
   pinMode(hw::P14, INPUT);
   pinMode(hw::P15, INPUT);
 
@@ -285,14 +278,13 @@ static void configurePins() {
   pinMode(hw::PPU_A0, OUTPUT);
   pinMode(hw::PPU_nCS, OUTPUT);
 
-  // External pull-up is present in hardware; keep deselected immediately.
   digitalWrite(hw::PPU_nCS, HIGH);
   digitalWrite(hw::PPU_A12_PAIR, LOW);
   digitalWrite(hw::PPU_A0, LOW);
   setPpuDataByte(0x00);
   setExtIndex(0);
 
-  pinMode(hw::PPU_nINT, INPUT); // external 3.3 V pull-up in schematic
+  pinMode(hw::PPU_nINT, INPUT);
   pinMode(hw::PALETTE_BUTTON, INPUT_PULLUP);
 
   attachInterrupt(digitalPinToInterrupt(hw::PPU_nINT), onPpuVblank, FALLING);
@@ -310,7 +302,6 @@ static void handlePaletteButton() {
   if ((now - buttonLastChangeMs) >= BUTTON_DEBOUNCE_MS && rawPressed != buttonStablePressed) {
     buttonStablePressed = rawPressed;
     if (buttonStablePressed) {
-      // AUTO/SGB -> manual 1 -> ... -> manual N -> AUTO/SGB
       paletteMode = static_cast<uint8_t>((paletteMode + 1u) % (MANUAL_PALETTE_COUNT + 1u));
       palettePending = true;
       Serial.print("Palette mode -> ");
@@ -340,28 +331,31 @@ static void serviceVblankBoundary() {
   }
 }
 
-// ----------------------- Timing-critical engines (V0.2 work) -----------------------
+// ----------------------- Timing-critical engines -----------------------
 
 static void captureEngineInit() {
-  // TODO V0.2: PIO + DMA capture from LD0/LD1 qualified by measured CP/timing.
-  // Bench work must freeze sample edge, active-pixel window, CPL/ST/S usage and
-  // handling of the DMG fine-scroll/suppressed-clock behavior before this is coded.
+  const bool ok = gb_capture::init(hw::LD0, hw::CP, hw::CPL, hw::ST, hw::S);
+  if (ok) {
+    Serial.println("Capture V0.2 armed: PIO0 + DMA, 160x144 LCD stream");
+  } else {
+    Serial.println("ERROR: Game Boy PIO/DMA capture initialization failed");
+  }
 }
 
 static void captureEngineService() {
-  // TODO V0.2: mark backFrameReady only after one complete valid 160x144 frame.
+  gb_capture::service(backFrame, backFrameReady);
 }
 
 static void extOutputEngineInit() {
-  // TODO V0.2: PIO + DMA output of:
+  // TODO V0.3: PIO + DMA output of:
   //   11 border + 234 scaled image + 11 border, 240 lines.
-  // V0.1 holds a static EXT index so the RP2C02/palette/composite chain can be
-  // validated independently of the pixel engine.
+  // V0.2 keeps a static EXT index so the RP2C02/palette/composite chain can be
+  // validated independently of the output pixel engine.
   setExtIndex(0);
 }
 
 static void extOutputEngineService() {
-  // TODO V0.2: hardware-driven output; no pixel-rate interrupt bit-banging.
+  // TODO V0.3: hardware-driven output; no pixel-rate interrupt bit-banging.
   (void)frontFrame;
   (void)packedGetPixel;
 }
@@ -376,7 +370,7 @@ void setup() {
   Serial.begin(115200);
   delay(50);
   Serial.println();
-  Serial.println("Game Boy RP2C02 CRT Adapter firmware V0.1");
+  Serial.println("Game Boy RP2C02 CRT Adapter firmware V0.2");
   Serial.println("Target: Raspberry Pi Pico 2 / RP2350");
 
   configurePins();
