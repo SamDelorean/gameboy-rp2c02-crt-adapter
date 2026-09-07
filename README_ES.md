@@ -22,7 +22,7 @@ Game Boy DMG / SGB
         |
         | LD0, LD1, CP, CPL, ST, S
         v
-controlador digital económico
+RP2350 / Raspberry Pi Pico 2
         |
         | captura + doble framebuffer
         | escalado aspect-correct
@@ -43,6 +43,7 @@ video compuesto NTSC
 ## Decisiones consolidadas
 
 - PPU NTSC RP2C02 o clon discreto funcionalmente compatible.
+- **RP2350** seleccionado como familia de controlador para V1; **Raspberry Pi Pico 2** como módulo preferido de prototipo.
 - Captura directa de `LD0`, `LD1`, `CP`, `CPL`, `ST` y `S`.
 - `P14/P15` opcionales para escucha pasiva de comandos de paleta Super Game Boy.
 - Dos framebuffers completos de 160x144x2 bits: 11,520 bytes en total.
@@ -53,22 +54,29 @@ video compuesto NTSC
 - El escalado debe ser simple y determinista; no se requiere un escalador de video de propósito general.
 - Render normal de tiles/sprites de NES deshabilitado en la primera versión.
 - Índices externos entregados por `EXT0..EXT3`.
+- Interfaz de control de PPU minimizada sin latches externos: bus sólo de escritura, `R/W` fijo en bajo, `A1/A2` unidos y `EXT0..EXT3` reutilizados también como `D0..D3` del bus CPU de la PPU.
 - Un botón para recorrer paletas globales curadas.
 - Las paletas provenientes de SGB son opcionales y siempre pueden ser sustituidas manualmente mediante el mismo botón.
 - Sin identificación de juego ni colorización regional en la versión 1.
 
-La derivación y el algoritmo canónico de escalado están documentados en [`docs/scaling.md`](docs/scaling.md).
+La derivación del escalado está documentada en [`docs/scaling.md`](docs/scaling.md), el presupuesto de pines en [`docs/controller-selection.md`](docs/controller-selection.md) y las interconexiones físicas en [`hardware/interfaces.md`](hardware/interfaces.md).
 
 ## Relojes de trabajo
 
 - PPU RP2C02: aproximadamente **21.4772727 MHz**.
-- Game Boy modificado: aproximadamente **4.2203555 MHz**.
+- Fuente Game Boy modificada: aproximadamente **4.2203555 MHz**.
 
 La intención es derivar ambos relojes de una referencia común para que un cuadro del Game Boy corresponda temporalmente con un cuadro de salida de la PPU y no sea necesario construir un convertidor asíncrono de frecuencia de cuadro.
 
 ## Controlador
 
-La selección todavía está abierta. El candidato principal actual es **RP2040 / Raspberry Pi Pico** por RAM, PIO, DMA, costo y facilidad de montaje, pero la decisión se cerrará con pruebas de temporización e I/O.
+La decisión de V1 queda fijada en **RP2350**, usando **Raspberry Pi Pico 2** como módulo de prototipo preferido.
+
+La razón principal es reducir electrónica adicional: mantiene PIO + DMA y los GPIO digitales actuales del RP2350 son tolerantes a 5 V cuando el chip está correctamente alimentado. Esto permite recibir directamente las señales LCD de 5 V del Game Boy en los GPIO adecuados, evitando el bloque general de adaptación de nivel que exigiría un RP2040.
+
+Con la interfaz PPU optimizada se usan **21 GPIO para DMG** y **23 GPIO incluyendo P14/P15**, dentro de los 26 GPIO expuestos por Pico 2 y sin shift-registers ni expansores de GPIO.
+
+Los GPIO ADC `26..28` se reservan para señales de 3.3 V/diagnóstico y no para entradas de 5 V.
 
 ## Sistema de paletas
 
