@@ -197,6 +197,24 @@ Reasons:
 
 Use 5 V source inputs only on the RP2350/Pico 2 fault-tolerant digital GPIO group; ADC-capable GPIO26..28 are reserved for 3.3 V-only diagnostics/future functions.
 
+### SET — Arduino IDE + Arduino-Pico is the V1 firmware environment
+
+The first firmware implementation uses **Arduino IDE with the Earle Philhower Arduino-Pico core**, targeting **Raspberry Pi Pico 2 / RP2350 in ARM mode**.
+
+This choice is made for practical build/upload/debug workflow, not to replace deterministic hardware timing with Arduino abstractions.
+
+The Arduino-Pico core is built on the Raspberry Pi Pico SDK and permits direct use of native RP2350 hardware APIs. Therefore:
+
+- low-rate setup, user interface, palette control and diagnostics may use ordinary Arduino APIs where convenient;
+- pixel-rate Game Boy capture and `EXT0..EXT3` output must use PIO + DMA or equivalent native hardware assistance;
+- ordinary `digitalWrite()`/interrupt bit-banging is not permitted for the final pixel pipeline.
+
+Canonical first sketch:
+
+```text
+firmware/arduino/GameBoyRP2C02CRT/GameBoyRP2C02CRT.ino
+```
+
 ### SET — Hardware-assisted deterministic pixel I/O
 
 Capture and EXT output use PIO/DMA or equivalent hardware assistance; pixel-rate interrupt bit-banging is not the architecture.
