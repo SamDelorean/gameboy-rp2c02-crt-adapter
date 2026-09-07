@@ -1,42 +1,33 @@
 # Firmware Architecture and Operating Principles
 
-This document records the **software design basis** of the project. The goal is that the firmware can be reimplemented on another controller without reconstructing the design history from chat logs.
+This document records the controller-independent software design basis. Version 1 favors small deterministic state machines over general-purpose graphics/video processing.
 
-The first implementation favors **small deterministic state machines** over general-purpose video-processing techniques.
-
-## 1. Fundamental design rule
-
-The firmware is not a generic video converter. It does not decode analog video, emulate an NES, or perform arbitrary resampling.
-
-Its narrow job is:
+## 1. Functional pipeline
 
 ```text
-DMG LCD stream
-    |
-    v
-capture 2-bit pixels
-    |
-    v
-complete 160 x 144 source framebuffer
-    |
-    v
-aspect-correct repetition scaler
-    |
-    v
-border/frame generator + palette index
-    |
-    v
-EXT0..EXT3
+Game Boy DMG / SGB video stream
+    -> capture 2-bit pixels
+    -> complete 160x144 source framebuffer
+    -> aspect-correct repetition scaler
+    -> border generator
+    -> palette index
+    -> EXT0..EXT3
 ```
 
 The RP2C02-compatible PPU remains responsible for NTSC raster timing, color generation and composite-video output.
 
-## 2. Logical firmware modules
+## 2. Baseline controller
+
+The V1 hardware baseline is **RP2350**, with **Raspberry Pi Pico 2** as the preferred prototype/module implementation.
+
+Firmware architecture should still remain portable, but the first implementation should exploit RP2350 PIO + DMA for deterministic capture and EXT output.
+
+## 3. Logical modules
 
 ```text
 clock_init
 ppu_init
-dmg_capture
+gb_capture
 frame_buffers
 fixed_scaler
 border_generator
@@ -47,295 +38,174 @@ user_input
 diagnostics
 ```
 
-The implementation may merge modules physically, but these responsibilities should remain conceptually separate.
-
-## 3. Source image representation
-
-The Game Boy DMG active image is:
+## 4. Source framebuffer
 
 ```text
 160 x 144 pixels
 2 bits per pixel
-4 shades
+5,760 bytes/frame
+11,520 bytes for FRONT + BACK
 ```
 
-One source frame requires:
+The framebuffer stores Game Boy shade indices only, not RGB and not a scaled image.
+
+- BACK receives the current source frame.
+- FRONT contains the last complete frame being displayed.
+- Swap only at a defined complete-frame/safe presentation boundary.
+- If a captured frame is incomplete or corrupt, keep the previous FRONT.
+
+## 5. Scaling and border composition
+
+V1 presentation:
 
 ```text
-160 x 144 x 2 bits = 5,760 bytes
+11 border | 234-dot Game Boy image | 11 border
+          x 240 lines
 ```
 
-Version 1 uses two complete source framebuffers:
+Vertical scaling:
 
 ```text
-2 x 5,760 = 11,520 bytes = 11.25 KiB
+144 -> 240
+L0 L1 L2 -> L0 L0 L1 L2 L2
 ```
 
-The buffers store only the original DMG shade indices, not RGB values and not a pre-scaled image.
-
-A practical packed representation is four 2-bit pixels per byte. The exact bit order may be chosen to suit the capture peripheral but must be documented and isolated behind access helpers.
-
-## 4. Ping-pong framebuffer ownership
-
-- **BACK** receives the frame currently being captured from the DMG.
-- **FRONT** contains the last complete frame being displayed.
-- FRONT and BACK exchange roles only at a defined complete-frame boundary.
-- The output path must never read from a buffer while the capture path modifies it.
-
-Conceptually:
+Horizontal scaling:
 
 ```text
-capture frame N into BACK
-        |
-frame complete
-        |
-mark BACK valid
-        |
-at safe presentation boundary
-FRONT <-> BACK
-        |
-capture frame N+1 while displaying frame N
+160 original emissions + 74 duplicate emissions = 234 dots
 ```
 
-If a captured frame is incomplete or corrupt, discard it and continue displaying the last valid FRONT frame.
+Each source pixel is emitted once or twice using a centered integer error accumulator or equivalent fixed table.
 
-## 5. Aspect-correct presentation is the baseline
+No 234x240 or 256x240 framebuffer is required.
 
-Version 1 does **not** stretch the 160 x 144 Game Boy image across the complete 256 x 240 PPU raster.
+The border generator owns the 22 non-image raster samples. V1 emits fixed black; later simple border colors/effects may be added without altering source storage or scaling.
 
-The selected presentation is:
+## 6. Deterministic capture
 
-```text
-11 border | 234-dot Game Boy picture | 11 border
-          x 240 lines high
-```
+The final capture implementation must document:
 
-In version 1 the two border regions are fixed black.
-
-The Game Boy image therefore fills the raster height while preserving its intended geometry much more closely on an NTSC CRT.
-
-This is the fixed version-1 scaling mode. Alternate stretch/crop modes are not part of the baseline user interface.
-
-See [`../docs/scaling.md`](../docs/scaling.md) for the derivation and reference mapping.
-
-## 6. Vertical scaler: 144 -> 240
-
-The vertical relationship is exact:
-
-```text
-240 / 144 = 5 / 3
-```
-
-Every three source lines become five output lines:
-
-```text
-source: L0 L1 L2
-repeat:  2  1  2
-output: L0 L0 L1 L2 L2
-```
-
-Repeat the pattern 48 times per frame:
-
-```text
-48 x 3 = 144 source lines
-48 x 5 = 240 output lines
-```
-
-No interpolation, filtering or floating point is required.
-
-## 7. Horizontal scaler: 160 -> 234
-
-The horizontal scaler emits every source pixel at least once and duplicates only the additional pixels required to reach 234 output dots.
-
-```text
-160 original emissions
-+ 74 duplicate emissions
-= 234 output dots
-```
-
-Each source pixel is therefore emitted either once or twice.
-
-A simple integer accumulator is sufficient:
-
-```c
-error = centered_initial_phase;
-
-for (x = 0; x < 160; x++) {
-    pixel = source[x];
-    emit(pixel);
-
-    error += 74;
-    if (error >= 160) {
-        emit(pixel);
-        error -= 160;
-    }
-}
-```
-
-The initial phase should distribute duplicates without visible left/right bias.
-
-For verification, the center-sampled reference mapping is:
-
-```text
-source_x = floor((output_x + 0.5) * 160 / 234)
-```
-
-for `output_x = 0..233`.
-
-The resulting line contains:
-
-- 86 source pixels emitted once;
-- 74 source pixels emitted twice;
-- 234 output image dots total.
-
-Since `gcd(160,234)=2`, an implementation may alternatively store a fixed 80-source-pixel -> 117-output-dot repetition pattern and use it twice per line.
-
-## 8. Border / frame generator
-
-Each visible PPU line is generated as:
-
-```text
-11 border dots
-234 scaled image dots
-11 border dots
-```
-
-Total:
-
-```text
-11 + 234 + 11 = 256
-```
-
-The two side regions are produced by the **border/frame generator**, not by modifying the Game Boy image and not by storing extra pixels in FRONT/BACK.
-
-Version 1 fixes:
-
-```text
-border_mode = fixed black
-```
-
-The important architectural separation is:
-
-- the scaler always maps 160 source pixels to 234 image dots;
-- the border generator owns the remaining 22 raster positions;
-- the framebuffer stores neither borders nor border color/effects.
-
-This keeps open a low-cost future extension in which the border generator could emit a selected color, a color related to the active palette, or another simple deterministic effect. Such a future extension must not require changing the scaler or introducing a general graphics layer.
-
-No border-selection UI is required in version 1.
-
-## 9. No scaled framebuffer is required
-
-Version 1 stores only the original 160 x 144 source frame.
-
-Neither a 234 x 240 framebuffer nor a 256 x 240 framebuffer is required. Scaling and border generation happen while FRONT is read for output.
-
-Advantages:
-
-- no full-frame scaling copy;
-- less RAM traffic;
-- less memory use;
-- deterministic mapping;
-- palette changes never rewrite pixels;
-- border changes, if introduced later, do not rewrite pixels;
-- the framebuffer remains a faithful copy of the original DMG shade data.
-
-A scaled framebuffer may be reconsidered only if measurements on the final controller show a compelling implementation benefit.
-
-## 10. Palette-independent pixels
-
-The framebuffer stores shade indices only:
-
-```text
-00 = DMG shade 0
-01 = DMG shade 1
-10 = DMG shade 2
-11 = DMG shade 3
-```
-
-The selected palette determines which RP2C02 color each shade becomes.
-
-Therefore:
-
-- scaling duplicates shade indices, not colors;
-- changing the palette does not touch FRONT/BACK;
-- manual and SGB-derived palettes use the same output path;
-- the border generator may remain independent of the four Game Boy shades.
-
-The exact EXT coding remains isolated inside the output module.
-
-## 11. DMG capture path
-
-Capture must be deterministic and peripheral/DMA-driven where practical.
-
-The final implementation must document:
-
-- which DMG signal qualifies a valid pixel;
+- valid-pixel qualifier;
 - sampling edge;
-- LD0/LD1 significance;
-- active-line start/end recognition;
-- active-frame start/end recognition;
-- blanking handling;
-- DMA transfer unit;
-- packed framebuffer format;
-- overrun behavior;
-- malformed/incomplete-frame behavior.
+- LD0/LD1 bit significance;
+- active-line start/end;
+- frame start/end;
+- blanking behavior;
+- DMA unit and packed-memory layout;
+- overrun and malformed-frame behavior.
 
-Do not assume all 456 DMG clocks in a line correspond to visible pixels. Only the 160 active LCD pixels are stored.
+Do not assume all 456 DMG clocks in a line are visible pixels; store only the active 160-pixel region.
 
-## 12. RP2C02 EXT output path
+## 7. Deterministic EXT output
 
-EXT0..EXT3 output must be deterministic and independent of ordinary foreground interrupt latency.
+`EXT0..EXT3` must be generated by PIO/DMA or equivalent hardware assistance. Pixel-rate ordinary-interrupt bit-banging is outside the architecture.
 
-Preferred mechanisms:
+On the RP2350 baseline, the four EXT GPIO should form one contiguous PIO output group.
 
-- PIO/state-machine output;
-- DMA-fed peripheral output;
-- equivalent deterministic hardware on the final controller.
+## 8. Minimized PPU CPU interface
 
-Pixel-rate GPIO bit-banging from ordinary interrupts is outside the intended architecture.
+V1 uses a **write-only** PPU CPU/register interface.
 
-## 13. Frame synchronization
-
-The project intentionally controls the Game Boy clock so that the DMG frame period and the simplified RP2C02 frame period derive from a common timing reference.
-
-Firmware assumes:
+Firmware needs only:
 
 ```text
-one complete DMG source frame
-        corresponds to
-one complete RP2C02 output frame
+$2000 PPUCTRL
+$2001 PPUMASK
+$2006 PPUADDR
+$2007 PPUDATA
 ```
 
-The RP2C02 `/INT` VBlank output is the preferred safe reference for:
+Hardware consequences are defined in `../hardware/interfaces.md`:
+
+- PPU `R/W` is fixed LOW;
+- `/CS` is the MCU-controlled access qualifier;
+- A1 and A2 are tied together and represented by one logical output `PPU_A12_PAIR`;
+- A0 remains separate;
+- EXT0..EXT3 share MCU GPIO with CPU D0..D3;
+- D4..D7 remain four low-rate outputs;
+- `/RESET` is passively pulled inactive and is not an MCU GPIO;
+- `/INT` is a direct frame/VBlank input.
+
+Register selector encoding:
+
+```text
+PAIR A0 = 00 -> $2000
+PAIR A0 = 01 -> $2001
+PAIR A0 = 10 -> $2006
+PAIR A0 = 11 -> $2007
+```
+
+A PPU write routine therefore performs:
+
+1. set `PPU_A12_PAIR` and `PPU_A0`;
+2. place D0..D7 on the shared/dedicated data outputs;
+3. assert `/CS` LOW for a validated write interval;
+4. deassert `/CS` HIGH;
+5. restore EXT pixel output state if needed.
+
+Writes should occur during VBlank/safe timing whenever they could otherwise disturb visible EXT output.
+
+## 9. PPU startup without PPUSTATUS reads
+
+V1 deliberately avoids CPU-side PPU reads.
+
+At power-up:
+
+1. place `/CS` inactive; hardware pull-up guarantees this while the MCU is booting;
+2. configure/start the common clock generator;
+3. initialize PIO/DMA, framebuffers, scaler and border state;
+4. allow the RP2C02 to run through at least the documented post-power/reset warm-up interval before relying on writes to PPUCTRL/PPUMASK/PPUADDR;
+5. write a known PPUCTRL value with EXT input mode selected and NMI enabled;
+6. keep normal tile/sprite rendering disabled;
+7. load the default palette through PPUADDR/PPUDATA;
+8. begin using `/INT` as the VBlank/safe-boundary reference;
+9. capture a complete valid Game Boy frame and promote it to FRONT;
+10. start steady-state EXT output.
+
+No firmware-controlled PPU reset pulse is required by the baseline topology. The hardware reset test pad remains available during bench work.
+
+## 10. Frame synchronization
+
+The project controls the Game Boy source clock and PPU clock from one common reference so that:
+
+```text
+1 complete Game Boy source frame
+        =
+1 complete simplified RP2C02 output frame
+```
+
+`/INT` is the preferred safe boundary for:
 
 - FRONT/BACK presentation changes;
 - palette writes;
-- low-rate user-interface state changes;
+- user-interface state application;
 - diagnostics.
 
-The two source framebuffers solve capture/display ownership and tearing; they are not a frame-rate-conversion reservoir.
+The two source framebuffers are not a frame-rate conversion reservoir.
 
-## 14. Palette handling and one-button UI
+## 11. Palette handling
 
-Version 1 uses one momentary button.
-
-Recommended mode cycle:
+The framebuffer stores only shade indices:
 
 ```text
-AUTO/SGB
-manual preset 1
-manual preset 2
-...
-manual preset N
--> AUTO/SGB
+00  shade 0
+01  shade 1
+10  shade 2
+11  shade 3
 ```
 
-Visible palette writes occur during VBlank or another verified safe PPU interval.
+Palette changes never rewrite FRONT/BACK.
 
-Manual user selection has priority over incoming SGB palette traffic. A button press while an SGB-derived palette is visible exits AUTO/SGB and selects a manual preset.
+One-button mode cycle:
 
-## 15. Optional SGB-lite path
+```text
+AUTO/SGB -> manual preset 1 -> ... -> manual preset N -> AUTO/SGB
+```
+
+Manual selection always has priority over incoming SGB palette traffic. Visible palette writes are applied during VBlank/safe timing.
+
+## 12. Optional SGB-lite
 
 Optional inputs:
 
@@ -344,7 +214,7 @@ P14
 P15
 ```
 
-Initial direct commands of interest:
+Initial commands:
 
 ```text
 PAL01
@@ -353,103 +223,62 @@ PAL03
 PAL12
 ```
 
-Processing model:
+Processing:
 
 ```text
 P14/P15
-   |
-packet decoder
-   |
-RGB555 palette
-   |
-convert to suitable RP2C02 colors
-   |
-cache palette
-   |
-apply only if AUTO/SGB is selected
+ -> packet decoder
+ -> RGB555 palette
+ -> RP2C02 color quantization
+ -> cached palette
+ -> apply only when AUTO/SGB is active
 ```
 
-The SGB path does not alter capture, framebuffer or scaling logic.
+While a manual preset is active, valid SGB packets may be decoded/cached but cannot alter the visible palette.
 
-While a manual preset is active, SGB packets may still be decoded and cached but must not replace the visible palette.
+## 13. User input and pulls
 
-## 16. Boot sequence
+`PALETTE_BUTTON` is a human-rate input. On the RP2350 baseline it should use the MCU internal pull-up with the switch to GND unless later EMC/noise testing justifies an external resistor.
 
-Recommended initial sequence:
+Button debounce is firmware-only and never runs in a pixel-critical path.
 
-1. Place GPIO in safe states.
-2. Hold the PPU in reset.
-3. Configure/start the common clock system.
-4. Initialize capture, scaler, border generator and output peripherals.
-5. Initialize framebuffer ownership.
-6. Release and initialize the PPU.
-7. Load a known safe default Game Boy palette and fixed-black border value.
-8. Capture one complete valid DMG frame into BACK.
-9. Promote it to FRONT at the defined boundary.
-10. Start normal EXT output.
-11. Enter steady-state operation.
+## 14. Error philosophy
 
-## 17. Error philosophy
-
-Version 1 should fail visibly and predictably rather than implement elaborate recovery algorithms.
-
-Examples:
-
-- incomplete frame -> discard and retain previous FRONT;
-- capture overrun -> flag diagnostic state and do not present corrupted buffer;
+- incomplete frame -> discard, retain previous FRONT;
+- capture overrun -> flag diagnostic state, do not present corrupt buffer;
 - invalid SGB packet -> discard;
-- missed palette VBlank -> defer to next VBlank;
-- button bounce -> debounce outside pixel timing.
+- missed palette safe interval -> defer to next VBlank;
+- button bounce -> debounce outside timing-critical code.
 
-## 18. Diagnostics are part of the product
+## 15. Diagnostics
 
-Maintain reproducible bench modes for:
+Maintain reproducible modes for:
 
 - fixed EXT color;
 - four-color bars;
 - checkerboard;
-- horizontal and vertical line patterns;
+- horizontal/vertical lines;
 - framebuffer address/count pattern;
 - border geometry markers;
-- explicit border-generator test color;
 - VBlank indicator;
 - capture frame counter;
-- optional timing GPIO markers.
+- timing GPIO markers.
 
-These are part of the validation procedure, not disposable debug code.
+USB CDC and SWD should be preferred for logs/debug before consuming additional permanent GPIO.
 
-## 19. Controller-independent invariants
+## 16. Controller-independent invariants
 
-Unless a documented design revision supersedes them:
-
-1. Capture the original 2-bit DMG LCD stream directly.
-2. Keep two complete 160 x 144 source buffers.
-3. Never modify FRONT while it is being displayed.
-4. Preserve the Game Boy image aspect rather than stretching it to the full 256-dot width.
-5. Present the image as 234 x 240 inside the 256 x 240 raster.
-6. Reserve 11 output dots on each side for the border/frame generator; version 1 emits fixed black.
-7. Keep border generation logically separate from scaling and source framebuffer storage.
-8. Scale vertically by exact 3-source-lines -> 5-output-lines repetition.
-9. Scale horizontally by deterministic 160 -> 234 one-or-two-times pixel repetition.
-10. Do not require a 234 x 240 or 256 x 240 intermediate framebuffer.
-11. Keep pixel storage independent of palette/color values.
-12. Drive EXT with hardware-assisted deterministic I/O.
-13. Perform palette changes during a safe PPU interval.
-14. Keep SGB support optional and subordinate to manual user control.
-15. Prefer transparent integer state machines over generalized graphics algorithms.
-
-## 20. Rationale
-
-The chosen architecture is intentionally simple:
-
-- preserve the original Game Boy geometry;
-- fill the CRT vertically;
-- use the remaining width as a dedicated border/frame region;
-- keep that region black in version 1 while preserving a clean future hook for simple cosmetic behavior;
-- avoid interpolation and floating point;
-- avoid a general-purpose video scaler;
-- avoid a scaled framebuffer;
-- remain easy to verify with an oscilloscope or logic analyzer;
-- remain portable to another MCU or FPGA.
-
-The project should remain a **small deterministic bridge between two pieces of period video hardware**, not evolve into a generic graphics processor.
+1. Capture original 2-bit Game Boy video data.
+2. Maintain two complete 160x144 source buffers.
+3. Never modify FRONT while displayed.
+4. Preserve Game Boy aspect ratio with 234x240 image geometry.
+5. Generate 11+11 border samples outside the scaler.
+6. Use exact 3->5 vertical repetition.
+7. Use deterministic 160->234 one-or-two-times horizontal repetition.
+8. Require no scaled output framebuffer.
+9. Keep pixels independent of palette.
+10. Drive EXT through hardware-assisted deterministic I/O.
+11. Use the minimized write-only PPU host interface unless a measured requirement forces a revision.
+12. Apply palette/bus changes at safe timing.
+13. Keep SGB optional and subordinate to user palette control.
+14. Prefer transparent integer state machines over generalized graphics abstractions.
