@@ -1,0 +1,39 @@
+net,endpoint_a,endpoint_b,endpoint_c,role,status
+LD0,Game Boy LD0,Pico2 GP0 hdr1,,source pixel bit,SET
+LD1,Game Boy LD1,Pico2 GP1 hdr2,,source pixel bit,SET
+CP,Game Boy CP,Pico2 GP2 hdr4,,source pixel timing,SET
+CPL,Game Boy CPL,Pico2 GP3 hdr5,,source timing,SET
+ST,Game Boy ST,Pico2 GP4 hdr6,,source timing,SET
+S,Game Boy S,Pico2 GP5 hdr7,,source frame timing,SET
+P14,Game Boy/SGB P14,Pico2 GP18 hdr24,,optional SGB-lite input,OPTIONAL
+P15,Game Boy/SGB P15,Pico2 GP19 hdr25,,optional SGB-lite input,OPTIONAL
+EXT0_D0,Pico2 GP6 hdr9,RP2C02 pin14 EXT0,RP2C02 pin2 CPU D0,shared EXT/data bit,SET pending bench
+EXT1_D1,Pico2 GP7 hdr10,RP2C02 pin15 EXT1,RP2C02 pin3 CPU D1,shared EXT/data bit,SET pending bench
+EXT2_D2,Pico2 GP8 hdr11,RP2C02 pin16 EXT2,RP2C02 pin4 CPU D2,shared EXT/data bit,SET pending bench
+EXT3_D3,Pico2 GP9 hdr12,RP2C02 pin17 EXT3,RP2C02 pin5 CPU D3,shared EXT/data bit,SET pending bench
+PPU_D4,Pico2 GP10 hdr14,RP2C02 pin6 CPU D4,,PPU host data,SET pending level check
+PPU_D5,Pico2 GP11 hdr15,RP2C02 pin7 CPU D5,,PPU host data,SET pending level check
+PPU_D6,Pico2 GP12 hdr16,RP2C02 pin8 CPU D6,,PPU host data,SET pending level check
+PPU_D7,Pico2 GP13 hdr17,RP2C02 pin9 CPU D7,,PPU host data,SET pending level check
+PPU_A12_PAIR,Pico2 GP14 hdr19,RP2C02 pin10 CPU A2,RP2C02 pin11 CPU A1,paired register address,SET
+PPU_A0,Pico2 GP15 hdr20,RP2C02 pin12 CPU A0,,register address,SET
+PPU_nCS,Pico2 GP16 hdr21,RP2C02 pin13 /CS,R1 10k to 3V3,host write strobe,SET pending level check
+PPU_nINT,Pico2 GP17 hdr22,RP2C02 pin19 /INT,R2 10k to 3V3,VBlank input,SET pending bench
+PPU_RnW,GND,RP2C02 pin1 R/W,,write-only host bus,SET
+PPU_nRST,RP2C02 pin22 /RST,R3 10k to PPU_5V,TP_PPU_RST,defined reset-inactive state,SET pending bench
+PPU_CLK_IN,clock subsystem flag,RP2C02 pin18 CLK,,~21.4772727 MHz NTSC target,OFF-SHEET
+GB_CLK_IN,clock subsystem flag,Game Boy DMG/SGB clock injection point,,~4.2203555 MHz synchronized target,OFF-SHEET
+PPU_VIDEO_RAW,RP2C02 pin21 VOUT,video subsystem flag,,raw unbuffered composite output,OFF-SHEET
+PPU_5V,power subsystem,RP2C02 pin40 +5V,C1 100nF to GND,PPU supply,OFF-SHEET
+GND,common reference,RP2C02 pin20 GND,Pico2 GND + Game Boy GND,common ground,SET
+PALETTE_BUTTON,Pico2 GP22 hdr29,SW1 to GND,,internal RP2350 pull-up,SET
+PPU_ALE_NC,RP2C02 pin39 ALE,NC,,external PPU memory interface unused,V0.1 NC
+PPU_AD0_7_NC,RP2C02 pins38-31 AD0-AD7,NC,,external PPU memory interface unused,V0.1 NC
+PPU_A8_13_NC,RP2C02 pins30-25 A8-A13,NC,,external PPU memory interface unused,V0.1 NC
+PPU_nRD_NC,RP2C02 pin24 /RD,NC,,external PPU memory interface unused,V0.1 NC
+PPU_nWR_NC,RP2C02 pin23 /WR,NC,,external PPU memory interface unused,V0.1 NC
+CLK_CTRL_RESERVED,Pico2 GP20 hdr26,separate clock sheet,,possible future I2C SDA,RESERVED
+CLK_CTRL_RESERVED,Pico2 GP21 hdr27,separate clock sheet,,possible future I2C SCL,RESERVED
+DIAG_3V3_ONLY,Pico2 GP26 hdr31,diagnostic/future,,not for 5V source input,RESERVED
+DIAG_3V3_ONLY,Pico2 GP27 hdr32,diagnostic/future,,not for 5V source input,RESERVED
+DIAG_3V3_ONLY,Pico2 GP28 hdr34,diagnostic/future,,not for 5V source input,RESERVED
