@@ -36,6 +36,35 @@ Source-specific differences belong at the source/clock interface, not in the sca
 
 The PPU supplies raster timing, palette/color selection and composite NTSC. The project does not emulate a complete NES.
 
+### SET — V0.1 schematic is partitioned into independent subsystems
+
+The first connection-level schematic freezes only the central interconnect:
+
+```text
+Game Boy DMG / SGB taps -> Pico 2 / RP2350 -> RP2C02
+```
+
+Clock generation, final power implementation and downstream video-output circuitry are separate sheets/subsystems.
+
+The central sheet uses off-sheet interfaces:
+
+```text
+PPU_CLK_IN      -> RP2C02 clock input (~21.4772727 MHz NTSC target)
+GB_CLK_IN       -> Game Boy/SGB synchronized clock-injection point (~4.2203555 MHz current target)
+PPU_VIDEO_RAW   <- RP2C02 pin 21 VOUT
+PPU_5V          -> RP2C02 supply
+PICO_VSYS       -> Pico 2 power input
+GND             -> mandatory common reference
+```
+
+See [`../hardware/schematic-v0.1.md`](../hardware/schematic-v0.1.md) and [`../hardware/netlist-v0.1.csv`](../hardware/netlist-v0.1.csv).
+
+### SET — V0.1 video boundary ends at raw RP2C02 VOUT
+
+The central schematic does not define a finished 75-ohm television output. `PPU_VIDEO_RAW` is the handoff node to a later video-output sheet.
+
+A minimal composite buffer may be documented later. Existing NES S-Video/HDMI/other downstream video modifications may be reusable independently, but they are outside the baseline capture/scaler/EXT architecture and are not assumed compatible until validated.
+
 ## Source interface
 
 ### SET — DMG reference capture signals
@@ -144,6 +173,8 @@ Design objective:
 
 Si5351A remains proposal 1. The common-reference architecture is SET; the exact clock IC is not frozen until frequency accuracy, jitter, duty cycle and startup are validated.
 
+The V0.1 central schematic does not include this generator; it receives `PPU_CLK_IN` and the Game Boy/SGB receives `GB_CLK_IN` as off-sheet clock nets.
+
 ### SET — `/INT` / VBlank is the safe software boundary
 
 Use PPU `/INT` for buffer presentation changes, palette writes, UI state and diagnostics after PPU initialization.
@@ -208,11 +239,17 @@ PAIR A0 = 11 -> $2007
 
 The same four RP2350 outputs drive both PPU EXT0..3 and CPU D0..3. Because V1 is write-only and `/CS` is inactive during normal pixel output, this removes four GPIO without external mux logic.
 
-Bench validation must confirm loading/contension behavior on real PPU/clones.
+Bench validation must confirm loading/contention behavior on real PPU/clones.
 
 ### SET — Direct minimized interface preferred over shift registers
 
 The former serialized/latch PPU-host proposal is not the V1 baseline because the RP2350/Pico 2 direct topology fits without those extra ICs.
+
+### SET — RP2C02 external VRAM-side bus is unconnected in the V0.1 central sheet
+
+The V0.1 architecture uses the PPU internal palette and keeps normal background/sprite rendering disabled. Therefore the external PPU memory-side pins (`ALE`, `AD0..AD7`, `A8..A13`, `/RD`, `/WR`) are marked NC on the first schematic rather than adding CHR/nametable memory hardware.
+
+This remains a bench-validation item before PCB freeze; unused PPU outputs/bidirectional pins must not be tied together or to arbitrary rails.
 
 ## GPIO budget
 
@@ -232,7 +269,7 @@ optional P14/P15                   +2
 DMG / SGB planned total           23
 ```
 
-Pico 2 therefore retains 3 GPIO for 3.3 V diagnostics/future use.
+Pico 2 therefore retains 3 GPIO for 3.3 V diagnostics/future use. GP20/GP21 remain reserved for the separate clock-generator sheet if I2C control is required.
 
 ## Passive/default-state policy
 
@@ -243,7 +280,7 @@ Pico 2 therefore retains 3 GPIO for 3.3 V diagnostics/future use.
 - `/CS`: pull HIGH so the PPU stays deselected while MCU boots.
 - `/INT`: pull to 3.3 V because the PPU output is open-drain.
 - `PALETTE_BUTTON`: RP2350 internal pull-up, button to GND unless later EMC testing requires an external resistor.
-- I2C SDA/SCL: normal external pull-ups to 3.3 V.
+- I2C SDA/SCL: normal external pull-ups to 3.3 V on the later clock sheet if used.
 
 Do not add arbitrary pulls to source pixel/timing lines, P14/P15 or EXT lines without a measured reason.
 
@@ -312,6 +349,10 @@ No NES CPU, CHR graphics, nametables, OAM or sprites are required. The PPU is a 
 ## Explicit project boundary
 
 ### SET — Direct CRT/yoke-deflection is outside this repository
+
+### DEFERRED / SEPARATE — Alternative downstream NES video modifications
+
+Alternative PPU video-output modifications may be documented by reference, but HDMI, S-Video, RGB-oriented or other downstream conversion hardware is not part of the central V1 schematic. The baseline handoff is `PPU_VIDEO_RAW`.
 
 ## Change discipline
 
