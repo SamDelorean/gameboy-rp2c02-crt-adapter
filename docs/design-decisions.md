@@ -12,6 +12,30 @@ This file is the current architectural decision register for the project. It dis
 
 ## Architecture
 
+### SET — Game Boy DMG / SGB compatibility is a core project target
+
+The project is planned as a **Game Boy DMG / SGB** video adapter.
+
+DMG is the first reference platform for bench validation, but SGB/SGB-CPU-compatible source hardware is part of the architecture plan rather than a future unrelated extension.
+
+The intended common path is:
+
+```text
+Game Boy DMG / SGB video source
+    -> deterministic capture
+    -> 160 x 144 x 2-bit source framebuffer
+    -> fixed aspect-preserving scaler
+    -> border/output composition
+    -> EXT0..EXT3
+    -> NES/Nintendo video PPU (RP2C02)
+    -> composite NTSC
+    -> CRT television
+```
+
+Source-specific electrical differences should be confined to the input/clock-interface layer wherever possible.
+
+See [`source-compatibility.md`](source-compatibility.md).
+
 ### SET — NES/Nintendo video PPU as final video generator
 
 The project uses an NTSC **RP2C02-compatible PPU** from the Nintendo Entertainment System / NES as the final video stage:
@@ -22,24 +46,11 @@ The project uses an NTSC **RP2C02-compatible PPU** from the Nintendo Entertainme
 
 The project does not build or emulate a complete NES.
 
-### SET — Digital bridge from Game Boy LCD bus to PPU EXT inputs
-
-```text
-Game Boy LCD signals
-    -> deterministic capture
-    -> 160 x 144 source framebuffer
-    -> fixed aspect-preserving scaler
-    -> EXT0..EXT3
-    -> NES/Nintendo video PPU (RP2C02)
-    -> composite NTSC
-    -> CRT television
-```
-
 ## Game Boy source hardware
 
-### SET — Direct LCD-side capture
+### SET — Direct Game Boy video-side capture
 
-Required source signals are presently:
+Required source signals on the DMG reference platform are presently:
 
 - `LD0`
 - `LD1`
@@ -49,25 +60,33 @@ Required source signals are presently:
 - `S`
 - GND/reference
 
-Exact electrical levels, sample edge and active-pixel window remain subject to bench validation.
+For SGB/SGB-CPU-compatible source hardware, equivalent accessible signals must be identified and electrically validated before that exact configuration is declared supported.
 
-### SET — Prefer damaged-display donor units for experimentation
+Exact voltage levels, sample edge, active-pixel window and loading remain subject to bench validation.
 
-Early prototypes should preferentially use a Game Boy DMG whose LCD is no longer reasonably repairable, provided the logic board and LCD timing/data signals remain healthy.
+### OPTIONAL — P14/P15 for SGB-lite
+
+`P14` and `P15` are optional passive inputs for SGB palette-command listening.
+
+They are not required for the common DMG / SGB video path, framebuffer, scaler, composite output or manual palette selection.
+
+### SET — Prefer damaged-display DMG donor units for experimentation
+
+Early DMG prototypes should preferentially use a Game Boy whose LCD is no longer reasonably repairable, provided the logic board and LCD timing/data signals remain healthy.
 
 Restorable consoles should not be sacrificed merely for development convenience.
 
 ## Source image and buffering
 
-### SET — 160 x 144, 2-bit source representation
+### SET — Common 160 x 144, 2-bit source representation
 
 The framebuffer stores the original four Game Boy shade indices, not RGB values.
 
-One frame:
-
 ```text
-160 x 144 x 2 bits = 5,760 bytes
+160 x 144 x 2 bits = 5,760 bytes/frame
 ```
+
+This representation is common to DMG and validated SGB-compatible sources once capture is complete.
 
 ### SET — Two complete source framebuffers
 
@@ -86,39 +105,30 @@ Version 1 uses FRONT/BACK ping-pong buffers:
 
 The two source buffers exist for clean ownership, complete-frame presentation and tear-free handoff.
 
-They are not intended to absorb continuous drift between two unrelated video clocks. Source/output cadence is synchronized by the common clock architecture described below.
+They are not intended to absorb continuous drift between unrelated video clocks. Source/output cadence is synchronized by the common clock architecture.
 
 ## Scaling and picture geometry
 
 ### SET — Preserve Game Boy picture proportions
 
-The earlier proposal to stretch the Game Boy image across the full `256 x 240` active PPU raster is **superseded**.
+The earlier proposal to stretch the Game Boy image across the full `256 x 240` active PPU raster is superseded.
 
-Version 1 instead fills the available vertical height while preserving the apparent Game Boy image proportions on the NTSC CRT.
+Version 1 fills the available vertical height while preserving the apparent Game Boy image proportions on the NTSC CRT.
 
 Baseline output:
 
 ```text
 PPU active raster: 256 x 240
-left black bar:     11 samples
-Game Boy picture:  234 x 240
-right black bar:    11 samples
+left border:         11 samples
+Game Boy picture:   234 x 240
+right border:        11 samples
 ```
 
-```text
-| 11 black |--------- 234-pixel Game Boy image ---------| 11 black |
-                              x 240 lines
-```
+The working RP2C02 NTSC pixel-aspect model is approximately `8:7`. With that non-square geometry, `234 x 240` closely preserves the Game Boy logical `160/144 = 10/9` picture ratio while allowing equal side borders.
 
-The working NTSC RP2C02 pixel-aspect model is approximately `8:7`. With that non-square pixel geometry, `234 x 240` gives an apparent picture ratio very close to the Game Boy's logical `160/144 = 10/9` ratio.
-
-A 233-sample image is mathematically slightly closer to the ideal but requires asymmetric 11/12-sample borders. Version 1 deliberately selects **234 samples** so the two side bars are equal. The residual aspect error is about 0.29%, negligible for the intended CRT application.
-
-See [`scaling.md`](scaling.md) for the canonical algorithm.
+See [`scaling.md`](scaling.md).
 
 ### SET — Vertical scaler: 144 -> 240 by 5/3 repetition
-
-Three source lines become five output lines:
 
 ```text
 L0 L1 L2 -> L0 L0 L1 L2 L2
@@ -127,7 +137,7 @@ repeat:       2  1  2
 
 The pattern repeats 48 times per frame.
 
-### SET — Horizontal scaler: 160 -> 234 by integer nearest-neighbor repetition
+### SET — Horizontal scaler: 160 -> 234 by deterministic integer repetition
 
 Every source pixel is emitted at least once and exactly 74 source pixels are duplicated:
 
@@ -135,78 +145,74 @@ Every source pixel is emitted at least once and exactly 74 source pixels are dup
 160 + 74 = 234
 ```
 
-Canonical controller-independent form:
-
-```text
-error = centered phase
-for each source pixel:
-    emit once
-    error += 74
-    if error >= 160:
-        emit same pixel again
-        error -= 160
-```
-
-Equivalent implementations may use a fixed repetition table, PIO/DMA descriptors or another deterministic state machine.
-
-### SET — Fixed black pillarbox bars
-
-Each visible line is:
-
-```text
-11 black + 234 scaled image + 11 black = 256 samples
-```
-
-The bars are generated by the output state machine and are not stored in the source framebuffer.
+A centered integer error accumulator, fixed table or equivalent deterministic state machine may be used.
 
 ### SET — No scaled intermediate framebuffer required
 
-The baseline stores only the two `160 x 144 x 2-bit` source frames. Neither a `234 x 240` nor a `256 x 240` framebuffer is required.
-
-Scaling and border generation happen while reading FRONT.
+Neither a `234 x 240` nor a `256 x 240` framebuffer is required. Scaling and border generation occur while reading FRONT.
 
 ### REJECTED FOR V1 — Multiple user-selectable scaling modes
 
-Version 1 has one presentation geometry: aspect-preserving, vertically filled, pillarboxed output. Adding stretch/zoom/crop modes would complicate the project without advancing its main purpose.
+Version 1 has one presentation geometry: aspect-preserving, vertically filled, pillarboxed output.
+
+Stretch/zoom/crop modes are outside the initial scope.
+
+## Border / output composition
+
+### SET — Border generator is logically separate from the scaler
+
+Each visible line is composed as:
+
+```text
+11 border + 234 scaled image + 11 border = 256 samples
+```
+
+The border samples are not stored in the source framebuffer and are not generated by the scaling algorithm itself.
+
+### SET — Version 1 border value is fixed black
+
+Black is the only version-1 behavior.
+
+### DEFERRED — Simple future border colors/effects
+
+A later revision may allow a different fixed color, palette-related color or another low-complexity effect inside the border generator.
+
+Such behavior must not alter the source framebuffer or aspect-correct scaler.
 
 ## Timing and clocks
 
 ### SET — Shared timing reference
 
-The Game Boy and RP2C02 derive their clocks from one reference so the frame domains do not accumulate relative drift.
+The Game Boy source and RP2C02 derive their clocks from one reference so the frame domains do not accumulate relative drift.
 
-Working targets:
+Working targets based on the DMG timing model:
 
 ```text
 RP2C02 master: ~21.4772727 MHz
-modified DMG:  ~4.2203555 MHz
+Game Boy source target: ~4.2203555 MHz
 ```
 
 Working relationship:
 
 ```text
-f_DMG / f_PPU_master = 798 / 4061
+f_GB / f_PPU_master = 798 / 4061
 ```
 
 These remain engineering target values until validated on final hardware.
 
+For SGB source hardware, the same system-level objective applies, but exact clock access/injection must be validated for the actual configuration rather than assumed identical to DMG.
+
 ### SET — Synchronize the source instead of building asynchronous frame-rate conversion
 
-The Game Boy clock is modified slightly so that:
+The Game Boy source clock is adapted so that the design objective is:
 
 ```text
-1 complete DMG frame = 1 complete simplified RP2C02 frame
+1 complete Game Boy source frame
+        =
+1 complete simplified RP2C02 frame
 ```
 
-This deliberately avoids:
-
-- generalized asynchronous frame-rate conversion,
-- periodic frame drop/duplication caused by drift,
-- deep timing-absorption buffers,
-- large elastic clock-domain-crossing logic,
-- a synchronization framebuffer at output resolution.
-
-The small FRONT/BACK buffers solve only capture/display ownership and tearing.
+This avoids generalized asynchronous frame-rate conversion, periodic frame drop/duplication, deep timing-absorption buffers and a synchronization framebuffer at output resolution.
 
 ### OPEN — Clock hardware proposal 1: Si5351A
 
@@ -222,17 +228,15 @@ common reference
 CLK0     CLK1
   |       |
   v       v
-PPU      DMG
-~21.4772727 MHz   ~4.2203555 MHz
+PPU   Game Boy source
+~21.4772727 MHz   ~4.2203555 MHz target
 ```
 
 The common-reference architecture is SET. The exact Si5351A implementation remains OPEN until bench validation.
 
-A `74AHCT125`-class buffer/interface is a current candidate where clock isolation or drive is required, but the final component is not frozen.
+A `74AHCT125`-class buffer/interface is a current candidate where isolation or drive is required, but the final component is not frozen.
 
-Validation must cover frequency, duty cycle, jitter, levels, edge rate/ringing, startup behavior and loading at the actual IC pins.
-
-The original Game Boy clock source must be isolated/disabled before an external synchronized clock is applied.
+The original source clock must be isolated/disabled before an external synchronized clock is applied.
 
 ### SET — PPU VBlank as safe software boundary
 
@@ -249,7 +253,7 @@ The original Game Boy clock source must be isolated/disabled before an external 
 
 Current leading candidate: **RP2040 / Raspberry Pi Pico** because of SRAM, PIO, DMA, low cost and easy prototyping.
 
-Alternatives may remain under consideration until deterministic capture/output timing is demonstrated.
+The final device must support deterministic capture/output plus optional P14/P15 inputs without requiring a separate SGB firmware architecture.
 
 ### SET — Hardware-assisted deterministic pixel I/O
 
@@ -309,11 +313,15 @@ While a manual preset is active, P14/P15 traffic may still be decoded/cached but
 
 Visible palette changes are applied during VBlank/safe timing.
 
-## Optional Super Game Boy support
+## Super Game Boy compatibility
+
+### SET — Common SGB video compatibility is planned independently of SGB-lite
+
+The project intends the common capture/buffer/scaler/output path to operate with SGB/SGB-CPU-compatible source hardware where the equivalent Game Boy video and clock signals are accessible.
+
+Each exact configuration must be bench validated and documented.
 
 ### OPTIONAL — Passive P14/P15 SGB-lite listener
-
-`P14` and `P15` are optional inputs. Base operation does not depend on them.
 
 Initial direct commands of interest:
 
@@ -323,6 +331,8 @@ Initial direct commands of interest:
 - `PAL12`
 
 Received RGB555 colors may be converted to suitable RP2C02 colors.
+
+Failure to receive these commands must not affect normal video or manual palettes.
 
 ### REJECTED FOR V1 — Full SGB emulation
 
@@ -336,10 +346,12 @@ Version 1 does not need CHR graphics, nametables, OAM, sprites or a NES CPU. The
 
 ## Software philosophy
 
-### SET — Keep shade storage, scaling and palette independent
+### SET — Keep source interface, shade storage, scaling and palette separable
 
+- source driver: handles DMG/SGB-specific electrical/timing details;
 - framebuffer: original 2-bit Game Boy shade indices;
 - scaler: deterministic repetition of those indices;
+- border generator: fills non-image samples;
 - palette: applied later by the PPU/output stage.
 
 ### SET — Prefer small deterministic state machines
@@ -348,7 +360,7 @@ Transparent integer state machines are preferred over generalized graphics abstr
 
 ### SET — Diagnostics are project assets
 
-Color bars, checkerboards, line patterns, frame counters, VBlank indicators and timing markers should remain maintained as reproducible validation tools.
+Color bars, checkerboards, line patterns, frame counters, VBlank indicators, border geometry markers and timing markers should remain maintained as reproducible validation tools.
 
 ## Explicit project boundary
 
