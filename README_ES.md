@@ -13,7 +13,7 @@ La presentación base será una imagen de aproximadamente **234×240 puntos dent
 
 De esta manera, la PPU del NES no sólo genera la señal de televisión, sino que también sirve como etapa final de color para los cuatro tonos originales del Game Boy.
 
-> **Estado:** fase de arquitectura y selección de componentes. Todavía no existe un esquemático de producción ni firmware validado como versión final.
+> **Estado:** la arquitectura central y la selección del controlador ya están fijadas. Existe firmware V0.2 a nivel de implementación teórica/pre-banco y un esquemático de interconexión V0.1. Quedan pendientes la validación eléctrica/temporal en hardware real, el circuito común de reloj, la salida EXT por PIO/DMA, la etapa final de video y la PCB de producción.
 
 ## Arquitectura resumida
 
@@ -44,7 +44,9 @@ video compuesto NTSC
 
 - PPU NTSC RP2C02 o clon discreto funcionalmente compatible.
 - **RP2350** seleccionado como familia de controlador para V1; **Raspberry Pi Pico 2** como módulo preferido de prototipo.
+- **Arduino IDE + Arduino-Pico** seleccionado como entorno práctico de desarrollo V1.
 - Captura directa de `LD0`, `LD1`, `CP`, `CPL`, `ST` y `S`.
+- El firmware V0.2 ya contiene la implementación teórica de captura PIO + DMA; falta validarla en banco.
 - `P14/P15` opcionales para escucha pasiva de comandos de paleta Super Game Boy.
 - Dos framebuffers completos de 160x144x2 bits: 11,520 bytes en total.
 - Escalado vertical fijo de 144 a 240 mediante repetición `5/3`.
@@ -78,11 +80,33 @@ Con la interfaz PPU optimizada se usan **21 GPIO para DMG** y **23 GPIO incluyen
 
 Los GPIO ADC `26..28` se reservan para señales de 3.3 V/diagnóstico y no para entradas de 5 V.
 
+## Estado del firmware
+
+La fuente actual es **firmware V0.2** para Arduino IDE + Arduino-Pico sobre Raspberry Pi Pico 2 / RP2350.
+
+Ya existe a nivel de diseño:
+
+- inicialización y escritura de paleta de la PPU;
+- framebuffers FRONT/BACK empaquetados;
+- tablas de escalado y autoverificación;
+- máquina de estado del botón de paleta;
+- ruta teórica de captura LCD mediante PIO + DMA;
+- normalización del buffer RAW al framebuffer BACK de 160×144×2 bits.
+
+Queda pendiente antes de poder llamarlo firmware validado:
+
+- medir y ajustar la captura en un DMG/SGB real;
+- implementar y validar la salida `EXT0..EXT3` mediante PIO + DMA;
+- implementar el decodificador SGB-lite opcional;
+- cerrar la tabla final de paletas curadas.
+
+Ver [`firmware/README.md`](firmware/README.md) y [`firmware/capture-engine.md`](firmware/capture-engine.md).
+
 ## Sistema de paletas
 
 Los cuatro tonos del Game Boy se mapean globalmente a cuatro colores de la PPU. La paleta activa no es fija: se busca que pueda cambiarse de forma sencilla durante el uso.
 
-La primera versión contempla:
+La versión 1 contempla:
 
 - un conjunto pequeño de paletas manuales curadas;
 - selección mediante un único botón;
