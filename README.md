@@ -13,7 +13,7 @@ The baseline presentation is approximately **234 x 240 image dots inside the PPU
 
 The NES PPU therefore serves not only as the television-signal generator, but also as the final color/palette stage for the four original Game Boy shades.
 
-> **Project status:** architecture and component-selection phase. No production-ready schematic or validated firmware release exists yet.
+> **Project status:** central architecture and controller selection are fixed; firmware V0.2 and the V0.1 interconnect schematic are implemented at design/pre-bench level. Bench electrical/timing validation, the common clock circuit, EXT output engine, final video-output stage and production PCB remain pending.
 
 ## Concept
 
@@ -47,7 +47,9 @@ A common frequency reference is planned for both the PPU and a modified Game Boy
 
 - NTSC **RP2C02 or functionally compatible discrete clone PPU** as the final video stage.
 - **RP2350** controller family selected for V1; **Raspberry Pi Pico 2** is the preferred prototype/module implementation.
+- **Arduino IDE + Arduino-Pico** selected as the practical V1 development environment.
 - Direct capture of the DMG LCD interface: `LD0`, `LD1`, `CP`, `CPL`, `ST`, and `S`.
+- Firmware V0.2 contains the theoretical PIO + DMA Game Boy capture engine; bench timing validation is still required.
 - Optional `P14/P15` taps for passive Super Game Boy palette-command listening.
 - Two complete 160x144x2-bit framebuffers (11,520 bytes total) for robust ping-pong operation.
 - Fixed vertical scaling from 144 to 240 using the exact `5/3` repetition relationship.
@@ -82,11 +84,33 @@ The optimized direct interface uses **21 GPIO for the DMG baseline and 23 GPIO w
 
 See [`docs/controller-selection.md`](docs/controller-selection.md) and [`hardware/interfaces.md`](hardware/interfaces.md).
 
+## Firmware status
+
+The current source tree is **firmware V0.2**, built for Arduino IDE + Arduino-Pico on Raspberry Pi Pico 2 / RP2350.
+
+Implemented at design level:
+
+- PPU initialization and palette writes;
+- FRONT/BACK packed framebuffers;
+- scaler tables and self-checks;
+- palette-button state machine;
+- theoretical PIO + DMA Game Boy LCD capture path;
+- raw capture normalization into the 160x144x2-bit BACK framebuffer.
+
+Still pending before a validated firmware release:
+
+- real-hardware timing/electrical validation of the capture engine;
+- deterministic RP2C02 EXT PIO/DMA output engine;
+- optional SGB-lite packet decoder;
+- final curated palette table.
+
+See [`firmware/README.md`](firmware/README.md) and [`firmware/capture-engine.md`](firmware/capture-engine.md).
+
 ## Palette system
 
 The four DMG shades are mapped globally to four PPU colors. The active palette is intentionally changeable rather than fixed.
 
-The first firmware is expected to provide:
+The V1 plan provides:
 
 - a small curated set of useful manual palettes selected with one button;
 - optional automatic SGB-derived palette selection when compatible P14/P15 traffic is available;
@@ -139,8 +163,8 @@ A chip merely being able to run NES software does not prove compatibility with t
 
 ```text
 docs/        theory, architecture, timing, scaling, palettes, references
-hardware/    interfaces, schematic planning, PCB sources later
-firmware/    firmware architecture and source later
+hardware/    interfaces, V0.1 interconnect schematic/netlist, PCB sources later
+firmware/    Arduino-Pico source, capture engine, firmware architecture
 tests/       bench validation and compatibility procedures
 ```
 
