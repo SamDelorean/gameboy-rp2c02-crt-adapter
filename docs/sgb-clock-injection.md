@@ -38,6 +38,27 @@ common project reference           |
                          SGB Game Boy subsystem
 ```
 
+## Prior practical implementation
+
+The project owner's previous SGB speed-correction installations used a very simple implementation:
+
+```text
+SNES-derived SGB clock trace
+        X   <- physical trace cut / isolation
+        |
+        +-------------------------------> original path disconnected
+
+5 V active oscillator module
+        |
+        +-------------------------------> injected at the SGB-side clock node
+```
+
+The remembered implementation used a **5 V active oscillator** as the replacement source. The host-derived clock trace was physically interrupted and the oscillator output was injected downstream of that interruption into the SGB Game Boy clock domain.
+
+This prior implementation is useful evidence for the present architecture because it demonstrates that the SGB clock domain can be separated from the SNES-derived source and driven externally with very little additional hardware.
+
+The historical oscillator frequency was chosen to make the SGB run at normal/native Game Boy speed. The exact oscillator part number, frequency tolerance, cut point and injection point from those past installations are not currently being asserted from memory and should be documented from the actual board used when reproducing the modification.
+
 ## Use in this project
 
 Historically, this type of modification can be used to replace the SGB's host-derived timing with a clock chosen to reproduce native Game Boy speed.
@@ -51,6 +72,8 @@ GB_SYNC_CLK ≈ 4.2203555 MHz
 ```
 
 The exact final value remains tied to the common-clock architecture and its bench validation.
+
+The new design does **not** require retaining a separate 5 V can oscillator. The historical 5 V oscillator implementation is the proof-of-principle precedent. The project intends to replace that source with `GB_SYNC_CLK` derived from the common programmable clock generator, followed by whatever buffering or level adaptation measurements show to be appropriate for the SGB input.
 
 ## What is considered resolved
 
@@ -71,6 +94,7 @@ For every exact SGB board/revision used in the project, record:
 - receiving IC/pin where practical;
 - nominal and measured voltage levels;
 - required buffer or level adaptation;
+- whether a 5 V logic-level clock is required or merely tolerated by that revision;
 - series damping if used;
 - measured frequency and duty cycle;
 - rise/fall time and ringing;
