@@ -7,9 +7,11 @@ In simple terms, the project takes the Game Boy's LCD pixel data, adapts and sca
 Two additional goals are central to the design:
 
 - provide **changeable color palettes**, including user-selected presets and optional palette information recovered from compatible Super Game Boy signaling;
-- scale the original 160x144 Game Boy image to a **full-screen 256x240 NTSC picture** using a deliberately simple fixed repetition algorithm, avoiding a complex general-purpose scaler or high-cost video-processing hardware.
+- make the Game Boy image fill essentially the full useful CRT height **without distorting its original aspect ratio**, using a deliberately simple fixed repetition algorithm instead of a complex general-purpose scaler.
 
-The same architecture therefore uses the NES PPU not only to generate the television signal, but also as the final color/palette stage for the four original Game Boy shades.
+The baseline presentation is approximately **234 x 240 image dots inside the PPU's 256 x 240 active raster**, with **11 black dots on each side**. This avoids stretching the Game Boy picture across the full 4:3 raster width and preserves its intended geometry much more closely.
+
+The NES PPU therefore serves not only as the television-signal generator, but also as the final color/palette stage for the four original Game Boy shades.
 
 > **Project status:** architecture and component-selection phase. No production-ready schematic or validated firmware release exists yet.
 
@@ -23,8 +25,9 @@ Game Boy DMG / SGB-CPU
 +------------------------------+
 | low-cost digital controller  |
 | capture + ping-pong buffers  |
-| simple fixed full-screen     |
-| scaling 160x144 -> 256x240   |
+| aspect-correct fixed scaler  |
+| 160x144 -> 234x240           |
+| 11 black + image + 11 black  |
 | palette + optional SGB-lite  |
 +------------------------------+
         |
@@ -46,27 +49,26 @@ A common frequency reference is planned for both the PPU and a modified Game Boy
 - Direct capture of the DMG LCD interface: `LD0`, `LD1`, `CP`, `CPL`, `ST`, and `S`.
 - Optional `P14/P15` taps for passive Super Game Boy palette-command listening.
 - Two complete 160x144x2-bit framebuffers (11,520 bytes total) for robust ping-pong operation.
-- Full-screen fixed nearest-neighbor scaling from 160x144 to 256x240.
-- Horizontal ratio: `8/5`, implemented by periodic source-pixel repetition.
-- Vertical ratio: `5/3`, implemented by periodic source-line repetition.
+- Fixed vertical scaling from 144 to 240 using the exact `5/3` repetition relationship.
+- Fixed horizontal scaling from 160 to 234 using deterministic integer nearest-neighbor repetition; each source pixel is emitted once or twice.
+- Fixed 11-dot black pillarbox bars on the left and right to preserve the Game Boy picture proportions.
+- No required 234x240 or 256x240 intermediate framebuffer in the baseline design.
 - Scaling is intentionally simple and deterministic; no general-purpose video scaler is required.
-- No required intermediate 256x240 framebuffer in the baseline design.
 - RP2C02 normal tile/sprite rendering disabled for the first implementation.
 - External palette indices driven through `EXT0..EXT3`.
 - One button cycles curated global four-color palettes.
 - Optional SGB-derived palettes may be received automatically, but the user can always override them with the same button.
-- Initial overscan/border behavior: fixed black.
 - No game database, no cartridge identification, and no regional colorization in version 1.
 - Early experiments should preferentially use DMG donor units with LCDs that are no longer reasonably repairable, while preserving restorable consoles.
 
-The consolidated decision record is maintained in [`docs/design-decisions.md`](docs/design-decisions.md). The controller-independent software operating principles and exact scaling patterns are documented in [`firmware/architecture.md`](firmware/architecture.md).
+The canonical scaling derivation and algorithm are documented in [`docs/scaling.md`](docs/scaling.md). The consolidated decision record is maintained in [`docs/design-decisions.md`](docs/design-decisions.md), and the controller-independent software operating principles are documented in [`firmware/architecture.md`](firmware/architecture.md).
 
 ## Working clock targets
 
 - RP2C02 master clock: approximately **21.4772727 MHz**.
 - Modified DMG clock: approximately **4.2203555 MHz**.
 
-Both should be derived from one reference. The final clock-generator IC is still under selection.
+Both should be derived from one reference so that one Game Boy source frame corresponds temporally with one simplified PPU output frame, avoiding a generalized asynchronous frame-rate-conversion subsystem.
 
 ## Controller selection
 
@@ -133,6 +135,7 @@ A chip merely being able to run NES software does not prove compatibility with t
 - NES CPU emulation.
 - NES background/sprite graphics.
 - Game identification.
+- Multiple user-selectable scaling modes.
 - SGB regional attribute colorization.
 - SGB graphical borders.
 - Full SGB emulation.
@@ -141,7 +144,7 @@ A chip merely being able to run NES software does not prove compatibility with t
 ## Repository structure
 
 ```text
-docs/        theory, architecture, timing, palettes, references
+docs/        theory, architecture, timing, scaling, palettes, references
 hardware/    interfaces, schematic planning, PCB sources later
 firmware/    firmware architecture and source later
 tests/       bench validation and compatibility procedures
