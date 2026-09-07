@@ -1,49 +1,45 @@
 # Design Decision Record
 
-This file consolidates the current architectural decisions of the project so contributors can distinguish **settled design intent**, **open choices**, and **explicit non-goals** without reconstructing the conversation history.
-
-It is a living document. A decision may be revised later, but changes should be deliberate and documented.
+This file is the current architectural decision register for the project. It distinguishes settled design intent from open choices and explicit non-goals.
 
 ## Status vocabulary
 
-- **SET** — current design basis; implementation should follow it unless superseded by a documented decision.
+- **SET** — current design basis.
 - **OPEN** — intentionally not frozen yet.
-- **OPTIONAL** — supported or reserved, but not required for basic operation.
-- **DEFERRED** — useful future direction, outside version 1.
-- **REJECTED FOR V1** — explicitly excluded from the first implementation.
+- **OPTIONAL** — supported/reserved, but not required for base operation.
+- **DEFERRED** — possible later work outside version 1.
+- **REJECTED FOR V1** — intentionally excluded from the first implementation.
 
 ## Architecture
 
-### SET — RP2C02-class PPU as final video generator
+### SET — NES/Nintendo video PPU as final video generator
 
-The project uses an NTSC RP2C02-compatible PPU as:
+The project uses an NTSC **RP2C02-compatible PPU** from the Nintendo Entertainment System / NES as the final video stage:
 
 - raster/timing generator,
 - palette/color stage,
-- composite NTSC output stage.
+- composite NTSC source.
 
 The project does not build or emulate a complete NES.
 
-### SET — Digital bridge between DMG LCD bus and PPU EXT inputs
-
-Base signal flow:
+### SET — Digital bridge from Game Boy LCD bus to PPU EXT inputs
 
 ```text
-DMG LCD signals
-    -> capture
-    -> source framebuffer
-    -> fixed scaler
+Game Boy LCD signals
+    -> deterministic capture
+    -> 160 x 144 source framebuffer
+    -> fixed aspect-preserving scaler
     -> EXT0..EXT3
-    -> RP2C02-compatible PPU
+    -> NES/Nintendo video PPU (RP2C02)
     -> composite NTSC
-    -> CRT
+    -> CRT television
 ```
 
 ## Game Boy source hardware
 
 ### SET — Direct LCD-side capture
 
-Required DMG-side signals are presently:
+Required source signals are presently:
 
 - `LD0`
 - `LD1`
@@ -53,73 +49,74 @@ Required DMG-side signals are presently:
 - `S`
 - GND/reference
 
-Electrical levels, exact sample edge and active-pixel window must still be verified before freezing the production schematic.
+Exact electrical levels, sample edge and active-pixel window remain subject to bench validation.
 
 ### SET — Prefer damaged-display donor units for experimentation
 
 Early prototypes should preferentially use a Game Boy DMG whose LCD is no longer reasonably repairable, provided the logic board and LCD timing/data signals remain healthy.
 
-The project should avoid sacrificing complete, restorable consoles merely for development convenience.
+Restorable consoles should not be sacrificed merely for development convenience.
 
 ## Source image and buffering
 
 ### SET — 160 x 144, 2-bit source representation
 
-The framebuffer stores the original four DMG shade indices rather than RGB values.
+The framebuffer stores the original four Game Boy shade indices, not RGB values.
 
-### SET — Two complete source framebuffers
-
-One source frame:
+One frame:
 
 ```text
 160 x 144 x 2 bits = 5,760 bytes
 ```
 
-Two buffers:
+### SET — Two complete source framebuffers
+
+Version 1 uses FRONT/BACK ping-pong buffers:
 
 ```text
-11,520 bytes = 11.25 KiB
+2 x 5,760 = 11,520 bytes = 11.25 KiB
 ```
-
-The design prioritizes robustness and clear buffer ownership over minimum RAM use.
-
-### SET — Ping-pong ownership
 
 - BACK receives the incoming frame.
-- FRONT is displayed/scaled.
-- FRONT and BACK exchange roles only at a defined complete-frame boundary.
-- The output path must never read from a buffer while the capture path modifies it.
+- FRONT is read by the display/scaler path.
+- Roles change only at a defined complete-frame boundary.
+- The displayed buffer is never modified in place.
 
-### SET — Framebuffers are not used as a frame-rate converter
+### SET — Framebuffers are not a frame-rate converter
 
-The two source buffers exist to provide clean ownership, complete-frame presentation and tear-free handoff.
+The two source buffers exist for clean ownership, complete-frame presentation and tear-free handoff.
 
-They are **not** intended to absorb a continuous timing mismatch between a free-running DMG and a free-running NTSC output.
+They are not intended to absorb continuous drift between two unrelated video clocks. Source/output cadence is synchronized by the common clock architecture described below.
 
-The source clock is instead modified so the Game Boy itself produces frames at the cadence required by the RP2C02 output domain.
+## Scaling and picture geometry
 
-## Scaling
+### SET — Preserve Game Boy picture proportions
 
-### SET — Full active PPU picture target: 256 x 240
+The earlier proposal to stretch the Game Boy image across the full `256 x 240` active PPU raster is **superseded**.
 
-Version 1 scales the full 160 x 144 DMG image to 256 x 240.
+Version 1 instead fills the available vertical height while preserving the apparent Game Boy image proportions on the NTSC CRT.
 
-### SET — Nearest-neighbor repetition only
-
-No bilinear/bicubic filtering, floating-point resampling or arbitrary-ratio scaler is required.
-
-### SET — Horizontal 8/5 scaler
-
-Five source pixels become eight output pixels using the center-phased repetition pattern:
+Baseline output:
 
 ```text
-A B C D E -> A A B C C D E E
-repeat:       2 1 2 1 2
+PPU active raster: 256 x 240
+left black bar:     11 samples
+Game Boy picture:  234 x 240
+right black bar:    11 samples
 ```
 
-The pattern repeats 32 times per line.
+```text
+| 11 black |--------- 234-pixel Game Boy image ---------| 11 black |
+                              x 240 lines
+```
 
-### SET — Vertical 5/3 scaler
+The working NTSC RP2C02 pixel-aspect model is approximately `8:7`. With that non-square pixel geometry, `234 x 240` gives an apparent picture ratio very close to the Game Boy's logical `160/144 = 10/9` ratio.
+
+A 233-sample image is mathematically slightly closer to the ideal but requires asymmetric 11/12-sample borders. Version 1 deliberately selects **234 samples** so the two side bars are equal. The residual aspect error is about 0.29%, negligible for the intended CRT application.
+
+See [`scaling.md`](scaling.md) for the canonical algorithm.
+
+### SET — Vertical scaler: 144 -> 240 by 5/3 repetition
 
 Three source lines become five output lines:
 
@@ -130,62 +127,90 @@ repeat:       2  1  2
 
 The pattern repeats 48 times per frame.
 
-### SET — No required 256 x 240 intermediate framebuffer
+### SET — Horizontal scaler: 160 -> 234 by integer nearest-neighbor repetition
 
-The baseline design scales while reading FRONT. A pre-scaled output framebuffer is not required unless later measurements show a compelling implementation advantage.
+Every source pixel is emitted at least once and exactly 74 source pixels are duplicated:
+
+```text
+160 + 74 = 234
+```
+
+Canonical controller-independent form:
+
+```text
+error = centered phase
+for each source pixel:
+    emit once
+    error += 74
+    if error >= 160:
+        emit same pixel again
+        error -= 160
+```
+
+Equivalent implementations may use a fixed repetition table, PIO/DMA descriptors or another deterministic state machine.
+
+### SET — Fixed black pillarbox bars
+
+Each visible line is:
+
+```text
+11 black + 234 scaled image + 11 black = 256 samples
+```
+
+The bars are generated by the output state machine and are not stored in the source framebuffer.
+
+### SET — No scaled intermediate framebuffer required
+
+The baseline stores only the two `160 x 144 x 2-bit` source frames. Neither a `234 x 240` nor a `256 x 240` framebuffer is required.
+
+Scaling and border generation happen while reading FRONT.
+
+### REJECTED FOR V1 — Multiple user-selectable scaling modes
+
+Version 1 has one presentation geometry: aspect-preserving, vertically filled, pillarboxed output. Adding stretch/zoom/crop modes would complicate the project without advancing its main purpose.
 
 ## Timing and clocks
 
 ### SET — Shared timing reference
 
-The Game Boy and the RP2C02 should derive their operating clocks from a common reference to prevent accumulated frame drift.
+The Game Boy and RP2C02 derive their clocks from one reference so the frame domains do not accumulate relative drift.
 
-Working targets currently documented:
+Working targets:
 
 ```text
 RP2C02 master: ~21.4772727 MHz
 modified DMG:  ~4.2203555 MHz
 ```
 
-The working frequency relationship is:
+Working relationship:
 
 ```text
 f_DMG / f_PPU_master = 798 / 4061
 ```
 
-These remain working engineering values until validated on the final hardware implementation.
+These remain engineering target values until validated on final hardware.
 
-### SET — Synchronize the source instead of building an asynchronous frame-rate converter
+### SET — Synchronize the source instead of building asynchronous frame-rate conversion
 
-This is a central design choice.
-
-A stock DMG and an NTSC RP2C02 do not naturally complete frames at exactly the same rate. If both were left free-running, the bridge would eventually have to correct their relative drift using a deeper framebuffer/queue, frame insertion or dropping, repeated frames, elastic buffering, or more complicated clock-domain-crossing logic.
-
-The project instead changes the DMG clock slightly so that:
+The Game Boy clock is modified slightly so that:
 
 ```text
 1 complete DMG frame = 1 complete simplified RP2C02 frame
 ```
 
-The design therefore adapts the source machine to the NTSC output cadence instead of compensating after capture.
+This deliberately avoids:
 
-Expected consequences:
+- generalized asynchronous frame-rate conversion,
+- periodic frame drop/duplication caused by drift,
+- deep timing-absorption buffers,
+- large elastic clock-domain-crossing logic,
+- a synchronization framebuffer at output resolution.
 
-- no generalized asynchronous frame-rate conversion,
-- no periodic frame drop/duplicate mechanism caused by source/output drift,
-- no large timing-absorption framebuffer,
-- no requirement for a separate 256 x 240 synchronization framebuffer,
-- deterministic latency,
-- simpler firmware and hardware state machines,
-- easier measurement and reproduction.
-
-The two small 160 x 144 source framebuffers remain because they solve a different problem: clean capture/display ownership and tear-free frame handoff.
+The small FRONT/BACK buffers solve only capture/display ownership and tearing.
 
 ### OPEN — Clock hardware proposal 1: Si5351A
 
-The first concrete implementation proposal uses one **Si5351A programmable clock generator** from a common crystal/reference source.
-
-Proposed channel use:
+The first implementation proposal is one Si5351A from a common crystal/reference:
 
 ```text
 common reference
@@ -201,197 +226,142 @@ PPU      DMG
 ~21.4772727 MHz   ~4.2203555 MHz
 ```
 
-The common-reference architecture is SET; the exact Si5351A implementation remains OPEN until bench validation.
+The common-reference architecture is SET. The exact Si5351A implementation remains OPEN until bench validation.
 
-A **74AHCT125-class buffer/level-interface device** is a current candidate for clock isolation/drive where required, but the exact output-conditioning component is not frozen.
+A `74AHCT125`-class buffer/interface is a current candidate where clock isolation or drive is required, but the final component is not frozen.
 
-Required validation includes:
+Validation must cover frequency, duty cycle, jitter, levels, edge rate/ringing, startup behavior and loading at the actual IC pins.
 
-- generated frequency accuracy,
-- duty cycle,
-- jitter/phase behavior,
-- voltage compatibility,
-- edge rate and ringing,
-- startup state,
-- loading at the actual DMG and PPU pins,
-- long-duration absence of relative frame drift.
+The original Game Boy clock source must be isolated/disabled before an external synchronized clock is applied.
 
-The DMG implementation must explicitly isolate or disable the stock clock source before applying the synchronized external clock; the design must not drive two active clock sources against one another.
+### SET — PPU VBlank as safe software boundary
 
-### SET — One source frame per PPU frame
+`/INT` / VBlank is the preferred interval for:
 
-The architecture is designed so one completed DMG source frame corresponds to one PPU output frame.
-
-### SET — Use PPU VBlank as safe software boundary
-
-`/INT` / VBlank is the preferred event for:
-
-- buffer presentation changes,
+- FRONT/BACK presentation changes,
 - palette writes,
-- low-rate UI housekeeping,
+- low-rate user-interface updates,
 - diagnostics.
 
 ## Controller
 
 ### OPEN — Final controller selection
 
-Current leading candidate: **RP2040 / Raspberry Pi Pico**.
+Current leading candidate: **RP2040 / Raspberry Pi Pico** because of SRAM, PIO, DMA, low cost and easy prototyping.
 
-Reasons:
+Alternatives may remain under consideration until deterministic capture/output timing is demonstrated.
 
-- sufficient SRAM,
-- PIO,
-- DMA,
-- low cost,
-- easy prototype assembly.
+### SET — Hardware-assisted deterministic pixel I/O
 
-Alternatives retained until timing validation closes the choice:
-
-- RP2350/Pico 2,
-- suitable ESP32-class devices,
-- practical FPGA solutions.
-
-### SET — Deterministic hardware-assisted pixel I/O
-
-Regardless of controller, the pixel stream should use PIO/DMA or an equivalent deterministic peripheral mechanism.
-
-Pixel-rate interrupt-driven GPIO bit-banging is not the intended architecture.
+Pixel capture/output should use PIO/DMA or an equivalent deterministic peripheral mechanism. Pixel-rate GPIO bit-banging from ordinary interrupts is not the intended architecture.
 
 ## PPU and clone compatibility
 
 ### SET — Original Ricoh chip not mandatory
 
-The project is intentionally compatible in concept with discrete NTSC PPU clones, salvaged or new-old-stock devices, provided they pass the project-specific validation procedure.
+Discrete NTSC-compatible PPU clones may be used if they pass project-specific tests.
 
 ### SET — Compatibility is measured, not assumed
 
-A clone must be checked for the functions this project actually uses:
+A candidate must be checked for:
 
-- `EXT0..EXT3` as external inputs,
+- `EXT0..EXT3` external-input operation,
 - palette RAM behavior,
-- reset/init behavior,
+- reset/register behavior,
 - `/INT` / VBlank,
 - NTSC timing,
 - usable composite output,
-- material palette/analog differences.
+- significant palette/analog differences.
 
-General ability to run NES games is insufficient proof.
+Running NES games is not sufficient evidence for this project's unusual EXT-input use case.
 
 ### OPEN — Clone compatibility matrix
 
-UA6528-class devices are historical candidates to validate. Other discrete clones may be added as real measurements become available.
-
-Integrated NOAC/COB devices are not treated as pin-compatible substitutes unless their required PPU functions are actually accessible.
+UA6528-class devices are initial historical candidates. Other discrete clones may be added as measured data becomes available.
 
 ## Palette behavior
 
 ### SET — Global four-color palette
 
-Version 1 maps the four DMG shade values to one global four-color PPU palette for the whole screen.
+The four Game Boy shades map to one global four-color PPU palette.
+
+The framebuffer and scaler remain palette-independent.
 
 ### SET — One-button user interface
 
-A single pushbutton cycles through a curated set of complete palette presets.
+The single button cycles:
 
-### OPEN — Exact number of presets
+```text
+AUTO/SGB -> manual preset 1 -> manual preset 2 -> ... -> manual preset N -> AUTO/SGB
+```
 
-Current practical target: **8 or 16** curated palettes.
+### OPEN — Exact number of manual presets
 
-Candidate families include:
+Current target: 8 or 16 curated palettes.
 
-- neutral grayscale,
-- classic DMG green,
-- amber,
-- sepia,
-- blue/cool palettes,
-- selected SGB/GBC-inspired mappings.
+### SET — User selection overrides SGB palette traffic
 
-### SET — Do not expose every mathematical palette combination
+If an SGB-derived palette is visible, one button press leaves AUTO/SGB and selects the first manual preset.
 
-Useful, readable presets are preferred over exhaustive combinatorial palette selection.
+While a manual preset is active, P14/P15 traffic may still be decoded/cached but cannot replace the visible palette.
 
-### SET — Palette changes during a safe PPU interval
+### SET — Palette writes occur during a safe PPU interval
 
-Palette writes are deferred to VBlank/safe timing rather than performed asynchronously during visible output.
-
-## Overscan / border
-
-### SET — Version 1 border/overscan is fixed black
-
-This is a passive behavior, not another user menu option.
-
-### DEFERRED — Alternative simple border behavior
-
-Possible future firmware may derive border color from the active palette or repeat edge pixels/lines, but this is intentionally outside the initial implementation.
+Visible palette changes are applied during VBlank/safe timing.
 
 ## Optional Super Game Boy support
 
-### OPTIONAL — Passive SGB-lite listener
+### OPTIONAL — Passive P14/P15 SGB-lite listener
 
-Reserve optional `P14` and `P15` inputs.
+`P14` and `P15` are optional inputs. Base operation does not depend on them.
 
-Initial direct palette commands of interest:
+Initial direct commands of interest:
 
 - `PAL01`
 - `PAL23`
 - `PAL03`
 - `PAL12`
 
-The received RGB555 colors may be converted to suitable RP2C02 palette colors.
-
-### SET — Base operation does not depend on SGB
-
-If P14/P15 are not connected or no valid SGB palette traffic is observed, normal manual palette operation continues unchanged.
+Received RGB555 colors may be converted to suitable RP2C02 colors.
 
 ### REJECTED FOR V1 — Full SGB emulation
 
-Version 1 does not implement:
-
-- active JOYP response,
-- `MLT_REQ` feedback,
-- regional attribute colorization,
-- tile transfers,
-- graphical SGB borders,
-- complete SGB presence emulation.
-
-### DEFERRED — Reserve additional joypad lines where cheap
-
-PCB/test-point planning may reserve P10-P15 where doing so costs little, preserving the possibility of later active SGB experiments without making them a version-1 dependency.
+Version 1 does not implement active JOYP response, `MLT_REQ` feedback, regional attribute colorization, tile transfers or graphical SGB borders.
 
 ## NES rendering features
 
-### REJECTED FOR V1 — Normal background/sprite rendering
+### REJECTED FOR V1 — Normal NES background/sprite rendering
 
-Version 1 does not need CHR graphics, nametables, OAM, sprites or a NES CPU.
-
-Keeping normal rendering disabled preserves the simple timing model and avoids turning the project into a partial NES implementation.
+Version 1 does not need CHR graphics, nametables, OAM, sprites or a NES CPU. The PPU is used as a video/raster/palette/composite stage, not as part of a partial NES implementation.
 
 ## Software philosophy
 
 ### SET — Keep shade storage, scaling and palette independent
 
-The framebuffer contains only DMG shade indices. Scaling duplicates indices. Palette selection is applied later by the PPU/output stage.
+- framebuffer: original 2-bit Game Boy shade indices;
+- scaler: deterministic repetition of those indices;
+- palette: applied later by the PPU/output stage.
 
 ### SET — Prefer small deterministic state machines
 
-The project favors transparent periodic logic over generalized graphics abstractions.
+Transparent integer state machines are preferred over generalized graphics abstractions, interpolation or floating-point video processing.
 
-### SET — Diagnostics are production project assets
+### SET — Diagnostics are project assets
 
-Bench modes such as color bars, checkerboards, line patterns, frame counters and timing markers should remain maintained because they form the reproducible validation procedure.
+Color bars, checkerboards, line patterns, frame counters, VBlank indicators and timing markers should remain maintained as reproducible validation tools.
 
 ## Explicit project boundary
 
-### SET — Direct CRT/yoke-deflection approach is not this repository's architecture
+### SET — Direct CRT/yoke-deflection is outside this repository
 
-Earlier direct-deflection concepts are outside this branch. This repository documents the RP2C02-based design unless a future independent branch explicitly states otherwise.
+This repository documents the RP2C02-based Game Boy-to-CRT design.
 
 ## Change discipline
 
 When a SET decision changes:
 
-1. update this file;
+1. update this register;
 2. update the affected technical document(s);
 3. record the reason in the project log/issue;
-4. distinguish new measurement from hypothesis;
-5. avoid silently changing implementation behavior without updating the design basis.
+4. distinguish measurement from hypothesis;
+5. do not leave obsolete implementation rules presented as current design.
