@@ -2,21 +2,22 @@
 
 This file tracks choices that should remain visibly open until they are closed by analysis or bench validation.
 
-## 1. Digital controller
+## Closed reference — digital controller
 
-Leading candidate: RP2040 / Pico.
+The V1 controller choice is **closed**: **RP2350**, with **Raspberry Pi Pico 2** as the preferred prototype/module implementation.
 
-Alternatives retained:
+The earlier RP2040/Pico candidate is retained only as historical comparison in `controller-selection.md`; it is not an open project choice.
 
-- RP2350 / Pico 2,
-- ESP32-class MCU with suitable deterministic I/O,
-- practical FPGA solution.
+Current controller-dependent baseline:
 
-Close only after a concrete resource/timing plan and representative test.
+- Arduino IDE + Arduino-Pico development environment;
+- RP2350 PIO + DMA for timing-critical capture/output;
+- 21 GPIO for the DMG baseline and 23 GPIO with optional `P14/P15`;
+- direct minimized write-only PPU interface with no shift-register/latch baseline.
 
-The final controller choice must leave enough GPIO/peripheral flexibility for the common Game Boy DMG / SGB capture path plus optional `P14/P15` SGB-lite inputs.
+See [`controller-selection.md`](controller-selection.md), [`design-decisions.md`](design-decisions.md), and [`../firmware/README.md`](../firmware/README.md).
 
-## 2. Common clock generator
+## 1. Common clock generator
 
 Required outputs:
 
@@ -32,9 +33,11 @@ Selection criteria:
 - easy availability,
 - compatible electrical output levels.
 
-The exact clock injection/isolation method remains to be validated separately for the selected DMG board and any SGB/SGB-CPU-compatible source hardware.
+The common-reference architecture is SET. The exact generator IC remains OPEN; Si5351A remains proposal 1 pending validation.
 
-## 3. Electrical level adaptation
+The physical clock injection/isolation point must still be documented and validated for the selected DMG board and each SGB/SGB-CPU-compatible source revision. For SGB, external clock replacement itself is already treated as an established design principle; see [`sgb-clock-injection.md`](sgb-clock-injection.md).
+
+## 2. Electrical level adaptation
 
 Must be derived from measured/verified voltage domains and thresholds. Do not freeze a buffer/translator solely from convenience.
 
@@ -45,7 +48,9 @@ This applies independently to:
 - optional `P14/P15`,
 - RP2C02/clone interfaces.
 
-## 4. SGB source compatibility
+The V1 baseline intentionally avoids blanket level shifting because RP2350 fault-tolerant digital GPIO can receive the Game Boy-side 5 V signals on the appropriate pins. Bench work must still validate power sequencing, thresholds, and the 3.3 V -> RP2C02 direction.
+
+## 3. SGB source compatibility
 
 SGB is a planned compatibility target, but exact supported hardware/configurations are still open until measured.
 
@@ -54,20 +59,20 @@ Need to close:
 - exact SGB/SGB-CPU hardware revision/configuration used for first validation,
 - access points for Game Boy video/timing signals or equivalents,
 - voltage/loading differences from DMG,
-- synchronized clock access/injection method,
+- exact physical clock cut/injection point for each validated board revision,
 - whether any source-specific input adapter is required.
 
 The goal is to keep source-specific differences confined to the source-interface layer and reuse the common 160x144 framebuffer/scaler/output pipeline.
 
-## 5. PPU reference device
+## 4. PPU reference device
 
 A specific RP2C02 revision or validated clone should be selected for the first bench fixture.
 
-## 6. Clone PPU support
+## 5. Clone PPU support
 
 Maintain a test-based compatibility matrix. Candidate families are not automatically compatible.
 
-## 7. Palette table
+## 6. Palette table
 
 Open points:
 
@@ -77,7 +82,7 @@ Open points:
 - RGB555 conversion method,
 - handling of unsafe/problematic PPU color codes.
 
-## 8. SGB-lite behavior
+## 7. SGB-lite behavior
 
 Initial scope is limited to passive direct-palette commands on optional `P14/P15`.
 
@@ -92,13 +97,13 @@ Active SGB identification emulation remains explicitly deferred unless later jus
 
 SGB video-path compatibility does not depend on closing every SGB-lite question.
 
-## 9. Border behavior beyond version 1
+## 8. Border behavior beyond version 1
 
 Version 1 uses fixed black for the two 11-dot side borders.
 
 Possible future simple behavior such as palette-related border color or other low-complexity effects is deliberately deferred. Any such feature must remain inside the border/output-composition block and must not change the aspect-correct scaler or source framebuffer.
 
-## 10. Final license declaration
+## 9. Final license declaration
 
 Current recommendation:
 
