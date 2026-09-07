@@ -33,6 +33,10 @@ static volatile uint32_t rawFramesCompleted = 0;
 static uint32_t framesAccepted = 0;
 static uint32_t framesDropped = 0;
 
+static inline uint32_t encodedFrameTransferCount() {
+  return dma_encode_transfer_count(gb_capture_pio::WORDS_PER_FRAME);
+}
+
 static inline uint8_t rawPreClockSample(const uint32_t *lineWords, uint16_t sampleIndex) {
   // Shift-left PIO packing: first two-bit sample is bits 31..30, last is 1..0.
   const uint16_t wordIndex = sampleIndex >> 4;       // /16
@@ -58,8 +62,6 @@ static inline void normalizeRawFrameToPacked(uint8_t *destination) {
       dst[byteIndex] = static_cast<uint8_t>(p0 | (p1 << 2) | (p2 << 4) | (p3 << 6));
     }
 
-    // Last packed byte: visible x=156..158 are raw pre-clock samples 157..159;
-    // visible x=159 is the direct final-pixel word pushed after the 160th CP.
     const uint8_t p156 = rawPreClockSample(line, 157);
     const uint8_t p157 = rawPreClockSample(line, 158);
     const uint8_t p158 = rawPreClockSample(line, 159);
@@ -89,7 +91,7 @@ static inline void armNextFrame() {
 
   dma_channel_set_write_addr(static_cast<uint>(dmaChannel), rawFrame, false);
   dma_channel_set_transfer_count(static_cast<uint>(dmaChannel),
-                                 gb_capture_pio::WORDS_PER_FRAME,
+                                 encodedFrameTransferCount(),
                                  false);
   dma_channel_start(static_cast<uint>(dmaChannel));
 
@@ -102,7 +104,9 @@ static inline bool init(uint pinLd0,
                         uint pinCpl,
                         uint pinSt,
                         uint pinS) {
-  const int claimedSm = pio_claim_unused_sm(pio0, true);
+  // Request gracefully rather than panicking if another library has consumed
+  // all PIO state machines or DMA channels.
+  const int claimedSm = pio_claim_unused_sm(pio0, false);
   if (claimedSm < 0) {
     return false;
   }
@@ -113,9 +117,12 @@ static inline bool init(uint pinLd0,
     return false;
   }
 
-  dmaChannel = dma_claim_unused_channel(true);
+  dmaChannel = dma_claim_unused_channel(false);
   if (dmaChannel < 0) {
     gb_capture_pio::stop(pioInstance);
+    pio_remove_program(pio0, &gb_capture_pio::program, pioInstance.offset);
+    pio_sm_unclaim(pio0, static_cast<uint>(claimedSm));
+    pioInstance = gb_capture_pio::Instance{};
     return false;
   }
 
@@ -130,7 +137,7 @@ static inline bool init(uint pinLd0,
                         &dmaConfig,
                         rawFrame,
                         &pioInstance.pio->rxf[pioInstance.sm],
-                        gb_capture_pio::WORDS_PER_FRAME,
+                        encodedFrameTransferCount(),
                         false);
 
   dma_channel_set_irq1_enabled(static_cast<uint>(dmaChannel), true);
