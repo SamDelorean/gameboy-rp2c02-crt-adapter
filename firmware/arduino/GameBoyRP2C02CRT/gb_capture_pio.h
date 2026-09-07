@@ -82,15 +82,21 @@ static const uint16_t programInstructions[PROGRAM_LENGTH] = {
   pio_encode_jmp_x_dec(PC_SET_Y_PIXELS),      // 11: repeat group five times
   pio_encode_in(pio_pins, 2),                 // 12: final direct LCD pixel
   pio_encode_wait_gpio(true, 3),              // 13: CPL rising latches complete line
-  pio_encode_push(false, true),                // 14: push two-bit final pixel word
+  pio_encode_push(false, true),               // 14: push two-bit final pixel word
   pio_encode_wait_gpio(false, 4),             // 15: wait ST low before next line
   pio_encode_jmp(PC_WAIT_ST_HIGH),            // 16: capture next active line
 };
 
+// PIO version 0 instructions are sufficient. On RP2350, used_gpio_ranges bit 0
+// advertises that this relocatable program touches only GP0..GP15 (actually GP0..5).
 static const struct pio_program program = {
   programInstructions,
   PROGRAM_LENGTH,
-  -1
+  -1,
+  0
+#if PICO_PIO_VERSION > 0
+  , 0x01
+#endif
 };
 
 struct Instance {
@@ -108,6 +114,12 @@ static inline bool init(Instance &instance,
                         uint pinCpl,
                         uint pinSt,
                         uint pinS) {
+  // V0.2 deliberately targets the canonical Pico 2 mapping. WAIT GPIO
+  // instructions are encoded for those raw GPIO numbers.
+  if (pinLd0 != 0 || pinCp != 2 || pinCpl != 3 || pinSt != 4 || pinS != 5) {
+    return false;
+  }
+
   if (!pio_can_add_program(pio, &program)) {
     return false;
   }
@@ -135,17 +147,7 @@ static inline bool init(Instance &instance,
   sm_config_set_in_pin_count(&c, 2);
 #endif
   sm_config_set_in_shift(&c, false, true, 32); // LEFT shift, autopush every 16 pixels
-  sm_config_set_jmp_pin(&c, pinCpl);
   sm_config_set_clkdiv(&c, 1.0f);
-
-  // WAIT GPIO instructions above use the project-fixed raw GPIO numbers.
-  // These assertions are intentionally simple because V0.2 targets Pico 2
-  // with the canonical GP0..GP5 source mapping.
-  if (pinLd0 != 0 || pinCp != 2 || pinCpl != 3 || pinSt != 4 || pinS != 5) {
-    pio_remove_program(pio, &program, instance.offset);
-    instance = Instance{};
-    return false;
-  }
 
   if (pio_sm_init(pio, sm, instance.offset + PC_WAIT_S_LOW, &c) < 0) {
     pio_remove_program(pio, &program, instance.offset);
