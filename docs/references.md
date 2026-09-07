@@ -25,6 +25,28 @@ This file tracks the main external technical references used by the project. Cla
 - NESdev — Errata  
   https://www.nesdev.org/wiki/Errata
 
+## Direct project inspiration — ANES dual-PPU work
+
+- decrazyo — **Advanced Nintendo Entertainment System (ANES)**  
+  https://github.com/decrazyo/anes
+
+- ANES project video — dual-PUU / external-video demonstration  
+  https://www.youtube.com/watch?v=V2kaV_m4iNU
+
+ANES is an important **conceptual inspiration** for this project. It modifies an NES to use two `RP2C02` PPUs and revisits the otherwise-unused `EXT0..EXT3` path as a way for one picture generator to contribute pixel/palette-index information to another PPU.
+
+The Game Boy RP2C02 CRT Adapter takes that same underlying PPU capability in a different direction: instead of using a second NES PPU as the external picture source, the project reconstructs the Game Boy DMG / SGB 2-bit image in a small digital controller and drives the RP2C02 `EXT0..EXT3` inputs directly.
+
+This reference is recorded as the historical trigger for the architecture, not as the sole technical authority for EXT behavior. Electrical and register-level claims remain cross-checked against NESdev documentation and bench measurements.
+
+Related dual-PPU references from the ANES ecosystem:
+
+- decrazyo — dual-PPU demo  
+  https://github.com/decrazyo/dual-ppu-demo
+
+- VinglesSmi — DualPPUTest  
+  https://github.com/VinglesSmi/DualPPUTest
+
 ## Game Boy / Super Game Boy
 
 - Pan Docs — Rendering  
