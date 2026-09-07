@@ -23,7 +23,7 @@ Game Boy DMG / SGB
         | LD0, LD1, CP, CPL, ST, S
         v
 +------------------------------+
-| low-cost digital controller  |
+| RP2350 / Raspberry Pi Pico 2 |
 | capture + ping-pong buffers  |
 | aspect-correct fixed scaler  |
 | 160x144 -> 234x240           |
@@ -46,6 +46,7 @@ A common frequency reference is planned for both the PPU and a modified Game Boy
 ## Current architecture decisions
 
 - NTSC **RP2C02 or functionally compatible discrete clone PPU** as the final video stage.
+- **RP2350** controller family selected for V1; **Raspberry Pi Pico 2** is the preferred prototype/module implementation.
 - Direct capture of the DMG LCD interface: `LD0`, `LD1`, `CP`, `CPL`, `ST`, and `S`.
 - Optional `P14/P15` taps for passive Super Game Boy palette-command listening.
 - Two complete 160x144x2-bit framebuffers (11,520 bytes total) for robust ping-pong operation.
@@ -56,27 +57,30 @@ A common frequency reference is planned for both the PPU and a modified Game Boy
 - Scaling is intentionally simple and deterministic; no general-purpose video scaler is required.
 - RP2C02 normal tile/sprite rendering disabled for the first implementation.
 - External palette indices driven through `EXT0..EXT3`.
+- PPU host interface minimized without extra latch ICs: write-only bus, `R/W` fixed low, A1/A2 tied together, and MCU `EXT0..EXT3` GPIO reused for PPU `D0..D3`.
 - One button cycles curated global four-color palettes.
 - Optional SGB-derived palettes may be received automatically, but the user can always override them with the same button.
 - No game database, no cartridge identification, and no regional colorization in version 1.
 - Early experiments should preferentially use DMG donor units with LCDs that are no longer reasonably repairable, while preserving restorable consoles.
 
-The canonical scaling derivation and algorithm are documented in [`docs/scaling.md`](docs/scaling.md). The consolidated decision record is maintained in [`docs/design-decisions.md`](docs/design-decisions.md), and the controller-independent software operating principles are documented in [`firmware/architecture.md`](firmware/architecture.md).
+The canonical scaling derivation and algorithm are documented in [`docs/scaling.md`](docs/scaling.md). The consolidated decision record is maintained in [`docs/design-decisions.md`](docs/design-decisions.md), and the controller/IO plan is documented in [`docs/controller-selection.md`](docs/controller-selection.md).
 
 ## Working clock targets
 
 - RP2C02 master clock: approximately **21.4772727 MHz**.
-- Modified DMG clock: approximately **4.2203555 MHz**.
+- Modified Game Boy source clock: approximately **4.2203555 MHz**.
 
 Both should be derived from one reference so that one Game Boy source frame corresponds temporally with one simplified PPU output frame, avoiding a generalized asynchronous frame-rate-conversion subsystem.
 
 ## Controller selection
 
-The controller is **not frozen yet**.
+The V1 controller decision is **RP2350**, with **Raspberry Pi Pico 2** as the preferred prototype module.
 
-The current leading candidate is **RP2040 / Raspberry Pi Pico** because it provides ample SRAM, PIO, DMA, low cost, and easy module-level prototyping. RP2350, ESP32-class MCUs, and suitable FPGAs remain alternatives until deterministic capture/output timing is demonstrated.
+The choice is driven mainly by system simplicity rather than raw performance: RP2350 keeps PIO + DMA while current digital GPIO can tolerate 5 V when correctly powered. That can remove the blanket level-shifting stage that an RP2040 implementation would need for the 5 V Game Boy LCD signals.
 
-See [`docs/controller-selection.md`](docs/controller-selection.md).
+The optimized direct interface uses **21 GPIO for the DMG baseline and 23 GPIO with optional P14/P15**, fitting inside the Pico 2's 26 exposed GPIO without PPU shift registers or GPIO expanders.
+
+See [`docs/controller-selection.md`](docs/controller-selection.md) and [`hardware/interfaces.md`](hardware/interfaces.md).
 
 ## Palette system
 
@@ -88,17 +92,7 @@ The first firmware is expected to provide:
 - optional automatic SGB-derived palette selection when compatible P14/P15 traffic is available;
 - immediate manual override of an SGB-derived palette by pressing the same button.
 
-Candidate categories include:
-
-- neutral grayscale,
-- classic DMG green,
-- warm green/yellow,
-- amber,
-- sepia,
-- blue / blue-gray,
-- selected SGB/GBC-inspired mappings.
-
-Palette writes should occur during VBlank.
+Palette writes occur during VBlank/safe PPU timing.
 
 ## Optional SGB-lite mode
 
@@ -119,7 +113,7 @@ The initial implementation deliberately does **not** emulate SGB controller-ID b
 
 The project is **not tied to original Ricoh-branded RP2C02 chips**. Discrete NTSC clone PPUs salvaged from Famiclones or obtained as old stock may be usable.
 
-Candidate families such as the **UMC UA6528** should be validated rather than assumed compatible. For this project, a clone must specifically demonstrate:
+A candidate clone must specifically demonstrate:
 
 - usable `EXT0..EXT3` external-input operation,
 - palette RAM behavior compatible with the design,
@@ -128,7 +122,7 @@ Candidate families such as the **UMC UA6528** should be validated rather than as
 - compatible NTSC raster timing,
 - stable composite output.
 
-A chip merely being able to run NES software does not prove compatibility with this unusual EXT-input use case. A formal compatibility matrix will be added as devices are tested.
+A chip merely being able to run NES software does not prove compatibility with this unusual EXT-input use case.
 
 ## Explicit non-goals for version 1
 
@@ -159,8 +153,6 @@ This project interfaces with vintage ICs and modified Game Boy hardware. Always 
 On stock NES hardware, the PPU EXT pins are normally grounded; they must not remain hard-grounded when externally driven.
 
 ## Licensing
-
-This repository contains hardware, firmware, and documentation, so a mixed-license model is being prepared rather than applying one generic license to everything.
 
 Current proposal:
 
