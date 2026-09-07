@@ -7,7 +7,9 @@ Dicho de forma sencilla: el proyecto toma la información de imagen que normalme
 Además, el diseño busca aprovechar dos ventajas importantes:
 
 - disponer de **paletas de color modificables**, tanto mediante presets elegidos por el usuario como, de forma opcional, mediante información de paleta recuperada de señales compatibles con Super Game Boy;
-- mostrar la imagen original de 160x144 píxeles del Game Boy **a pantalla completa en 256x240**, utilizando un algoritmo fijo de repetición muy simple y determinista, sin necesidad de un escalador de video general ni de hardware o software de gran complejidad.
+- mostrar la imagen del Game Boy ocupando prácticamente toda la altura útil de la televisión **sin deformar su relación de aspecto**, utilizando un algoritmo fijo de repetición muy simple y determinista.
+
+La presentación base será una imagen de aproximadamente **234×240 puntos dentro del raster 256×240 de la PPU**, con **11 puntos negros a cada lado**. Así se evita estirar la imagen del Game Boy hasta el ancho completo del formato 4:3 y se conserva mucho mejor su geometría original.
 
 De esta manera, la PPU del NES no sólo genera la señal de televisión, sino que también sirve como etapa final de color para los cuatro tonos originales del Game Boy.
 
@@ -23,8 +25,9 @@ Game Boy DMG / SGB-CPU
 controlador digital económico
         |
         | captura + doble framebuffer
-        | escalado simple a pantalla completa
-        | 160x144 -> 256x240
+        | escalado aspect-correct
+        | 160x144 -> 234x240
+        | 11 negro + imagen + 11 negro
         | paletas + SGB-lite opcional
         v
 EXT0..EXT3
@@ -43,22 +46,25 @@ video compuesto NTSC
 - Captura directa de `LD0`, `LD1`, `CP`, `CPL`, `ST` y `S`.
 - `P14/P15` opcionales para escucha pasiva de comandos de paleta Super Game Boy.
 - Dos framebuffers completos de 160x144x2 bits: 11,520 bytes en total.
-- Escalado a pantalla completa mediante nearest-neighbor fijo de 160x144 a 256x240.
-- Relación horizontal `8/5` y vertical `5/3`.
+- Escalado vertical fijo de 144 a 240 mediante repetición `5/3`.
+- Escalado horizontal fijo de 160 a 234 mediante repetición entera determinista: cada píxel fuente se emite una o dos veces.
+- Dos bandas negras fijas de 11 puntos a izquierda y derecha para conservar la relación de aspecto del Game Boy.
+- No se requiere framebuffer intermedio de 234x240 ni de 256x240.
 - El escalado debe ser simple y determinista; no se requiere un escalador de video de propósito general.
 - Render normal de tiles/sprites de NES deshabilitado en la primera versión.
 - Índices externos entregados por `EXT0..EXT3`.
 - Un botón para recorrer paletas globales curadas.
 - Las paletas provenientes de SGB son opcionales y siempre pueden ser sustituidas manualmente mediante el mismo botón.
-- Overscan inicial negro fijo.
 - Sin identificación de juego ni colorización regional en la versión 1.
+
+La derivación y el algoritmo canónico de escalado están documentados en [`docs/scaling.md`](docs/scaling.md).
 
 ## Relojes de trabajo
 
 - PPU RP2C02: aproximadamente **21.4772727 MHz**.
 - Game Boy modificado: aproximadamente **4.2203555 MHz**.
 
-La intención es derivar ambos relojes de una referencia común.
+La intención es derivar ambos relojes de una referencia común para que un cuadro del Game Boy corresponda temporalmente con un cuadro de salida de la PPU y no sea necesario construir un convertidor asíncrono de frecuencia de cuadro.
 
 ## Controlador
 
