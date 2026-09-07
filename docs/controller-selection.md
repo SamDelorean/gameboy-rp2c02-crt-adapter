@@ -1,238 +1,248 @@
 # Controller Selection
 
-The controller is intentionally not frozen yet.
+## Decision
 
-The purpose of this document is now twofold:
+**SET for the version-1 baseline: RP2350, with Raspberry Pi Pico 2 as the preferred prototype/module implementation.**
 
-1. define the **functional I/O contract** that any candidate controller must satisfy;
-2. compare candidate controllers against that real pin/timing budget rather than against headline CPU specifications.
+The deciding criterion is not maximum CPU performance. The project prefers the controller/topology that achieves the required deterministic video path with the **least additional electronics** while remaining easy to build and debug.
 
-See [`../hardware/interfaces.md`](../hardware/interfaces.md) for the physical interconnection table and electrical-validation requirements.
+RP2350/Pico 2 is preferred over RP2040/Pico because it retains PIO + DMA, provides ample SRAM, and current RP2350 digital GPIO are 5 V tolerant when IOVDD is powered. This can eliminate the separate level-shifting stage that RP2040 would require for the 5 V Game Boy LCD signals.
+
+Use current RP2350 silicon and do not rely on obsolete early-silicon high-impedance behavior. On Pico 2, the ADC-capable GPIO26..28 are not to be used for 5 V source inputs; the Game Boy/SGB 5 V inputs should use the fault-tolerant digital GPIO group.
+
+See [`../hardware/interfaces.md`](../hardware/interfaces.md) for the electrical/interconnection contract.
 
 ## Hard requirements
 
-The selected device must provide:
+The selected controller must provide:
 
-- at least 11.25 KiB of practical framebuffer RAM,
-- deterministic capture of the Game Boy DMG / SGB-compatible video stream,
-- deterministic output of PPU EXT pixel indices,
-- enough usable GPIO after accounting for the complete interface,
-- support for optional `P14/P15` without forcing a separate architecture,
-- a practical method to initialize/control the RP2C02,
-- a practical method to configure the common clock generator,
-- low component cost,
-- practical hand assembly or module-level prototyping,
-- accessible development tools,
-- a design that does not depend on pixel-rate interrupt bit-banging.
+- at least 11.25 KiB for two complete 160x144x2-bit source framebuffers;
+- deterministic Game Boy DMG / SGB source capture;
+- deterministic four-bit `EXT0..EXT3` output;
+- enough GPIO for the optimized direct interface including optional `P14/P15`;
+- hardware-assisted I/O (PIO/DMA or equivalent), not pixel-rate interrupt bit-banging;
+- practical clock-generator control;
+- simple module-level prototyping and USB/SWD development access.
 
-## Controller I/O contract
+RP2350/Pico 2 exceeds the memory/peripheral requirements: the relevant advantage here is **5 V-tolerant digital input plus PIO/DMA and sufficient exposed GPIO after optimization**.
 
-The table below counts **logical signals at the controller boundary**. Power, ground, the PPU composite-video output, and the two generated clock outputs are not MCU GPIO because they do not pass through the controller.
+## Design rule for saving pins
 
-| Interface group | Signals | MCU direction | GPIO count | Timing class | V1 status | Expected use |
-|---|---|---:|---:|---|---|---|
-| Game Boy pixel data | `LD0`, `LD1` | input | 2 | pixel-rate / deterministic | required | two-bit source shade value |
-| Game Boy pixel clock | `CP` | input | 1 | pixel-rate / deterministic | required | qualifies/samples source pixels |
-| Game Boy line/frame timing | `CPL`, `ST`, `S` | input | 3 | deterministic timing | required until bench proves any can be omitted | active-line and frame reconstruction |
-| SGB-lite listener | `P14`, `P15` | input | 2 | low-rate but edge/timing sensitive | optional / reserved | passive Super Game Boy palette-command capture |
-| PPU external pixel index | `EXT0..EXT3` | output | 4 | PPU-pixel-rate / deterministic | required | selected 4-bit PPU palette index / border value |
-| PPU data bus | `D0..D7` | bidirectional-capable preferred | 8 | low-rate register access | required interface function | palette/register writes; optional status reads |
-| PPU register address | `A0..A2` | output | 3 | low-rate | required | select PPU CPU-interface register |
-| PPU bus control | `R/W`, `/CS` | output | 2 | low-rate | required | execute PPU register cycles |
-| PPU reset | `/RESET` | output | 1 | startup/control | required | deterministic PPU initialization |
-| PPU VBlank | `/INT` | input | 1 | frame-rate / timing reference | required | safe buffer/palette/UI boundary |
-| Clock-generator control | `SDA`, `SCL` | bidirectional + output | 2 | low-rate | required for programmable-clock proposal | configure Si5351A or equivalent |
-| User control | `PALETTE_BUTTON` | input | 1 | human-rate | required | AUTO/SGB and manual palette selection |
-| Diagnostics | timing markers / status outputs | output | 2-4 desirable | debug | desirable | oscilloscope / logic-analyzer observability |
-| Serial debug | UART TX/RX or equivalent | output/input | 2 desirable | debug | optional | bring-up logs and diagnostics |
+Before adding a latch, bus expander, level shifter, or other glue IC, use the following priority:
 
-### Direct-GPIO pin budget
+1. remove signals that can be fixed safely by wiring or pull resistors;
+2. merge address/control signals whose required states are identical;
+3. reuse MCU GPIO where two PPU pins can safely share one driven net;
+4. preserve direct dedicated paths for timing-critical video signals;
+5. add external logic only if bench measurements show the direct minimized topology is insufficient.
 
-If every PPU host-interface signal is wired directly to the MCU:
+## PPU host interface: write-only V1
 
-```text
-Game Boy capture             6
-PPU EXT output               4
-PPU host interface          15
-clock-generator control      2
-palette button               1
-------------------------------
-mandatory total             28 GPIO
+Version 1 does **not** require PPU CPU-bus reads.
 
-optional P14/P15            +2
-------------------------------
-DMG / SGB planned total     30 GPIO
-```
+The firmware can avoid `PPUSTATUS` reads by:
 
-This leaves **no GPIO margin** on a 30-GPIO controller before diagnostic pins or UART are considered.
+- allowing the documented PPU warm-up interval after power/reset before writing the registers that are initially inhibited;
+- using `/INT` after enabling NMI as the safe VBlank/frame reference.
 
-The budget intentionally continues to count `CPL`, `ST`, and `S` until capture measurements establish that any one of them can be safely eliminated. The project should not save pins by silently weakening the source-interface definition.
+This makes the CPU-side PPU interface write-only and enables several no-IC pin reductions.
 
-## Signals that are not MCU GPIO
+The required PPU CPU-interface registers are:
 
-The following important system signals bypass the controller and therefore do not consume MCU GPIO in the baseline architecture:
+| Register | A2 A1 A0 | V1 use |
+|---|---|---|
+| `$2000` PPUCTRL | `000` | EXT input mode / NMI control |
+| `$2001` PPUMASK | `001` | rendering state if explicitly written |
+| `$2006` PPUADDR | `110` | palette address setup |
+| `$2007` PPUDATA | `111` | palette data write |
 
-| Signal | Source | Destination | Reason |
-|---|---|---|---|
-| `PPU_CLK` | common clock generator | RP2C02 | generated directly by clock subsystem |
-| `GB_SYNC_CLK` | common clock generator | Game Boy DMG / SGB source | replaces/adapts source clock directly |
-| `COMPOSITE_OUT` | RP2C02 | CRT / video connector | analog output generated by PPU |
+No V1 requirement currently needs `$2002`..`$2005`.
 
-An optional clock-generator output-enable pin is not currently counted; it may be added if startup measurements show it is useful.
+## Pin-saving decisions
 
-## Timing-critical pins that should remain direct
+### SET — `R/W` fixed LOW
 
-The following groups should **not** be moved behind a slow GPIO expander merely to save pins:
+The PPU CPU interface is write-only in V1, so PPU `R/W` is tied to GND and consumes no MCU GPIO.
 
-- `LD0`, `LD1`, `CP`, and the required Game Boy timing inputs;
-- `EXT0..EXT3`;
-- preferably `/INT`.
+`/CS` remains MCU-controlled and is the access qualifier/strobe.
 
-For an RP2040-class implementation, the capture and EXT groups should be assigned with the PIO program in mind. In particular:
+### SET — PPU `/RESET` normally pulled HIGH, no MCU GPIO
 
-- `LD0` / `LD1` should be placed so a PIO state machine can sample the two-bit value efficiently;
-- `EXT0..EXT3` should preferably occupy four contiguous GPIOs for one deterministic PIO output group;
-- clock/timing inputs should be assigned only after the exact PIO capture state machine is written and checked against the package/module pinout.
+The PPU can power up with `/RESET` held inactive; Famicom hardware is a precedent for a permanently high PPU reset input.
 
-## Low-rate PPU host bus is the main pin-count optimization target
+For the project schematic, prefer a pull-up plus labeled test/reset pad rather than dedicating an MCU GPIO. This gives a defined state and preserves the ability to force reset during bench work.
 
-The RP2C02 CPU/register interface is used only for initialization, palette writes, and occasional control/status operations. It does **not** need pixel-rate bandwidth.
+Startup firmware must wait through the PPU warm-up interval before relying on register writes.
 
-Therefore the project should evaluate two implementation families.
+### SET — Tie PPU A1 and A2 together
 
-### Option A — fully direct PPU host bus
-
-Advantages:
-
-- minimum glue logic,
-- straightforward register reads and writes,
-- easy probing,
-- simplest electrical topology.
-
-Disadvantages:
-
-- consumes 14 controller outputs/bidirectional pins plus `/INT`;
-- pushes a 30-GPIO MCU to the limit once SGB-lite is reserved;
-- cannot fit the complete direct interface on a 26-GPIO Pico module.
-
-This option favors a controller/package with significantly more than 30 usable GPIO.
-
-### Option B — serialize/latch the low-rate PPU host outputs
-
-A strong candidate is to drive the low-rate PPU write-side interface through a small serial-to-parallel latch arrangement, for example two 8-bit shift/latch devices of an electrically suitable logic family.
-
-Conceptually:
+For the four registers used by V1, A1 and A2 always have identical values:
 
 ```text
-MCU
- | SER / CLK / LATCH
- v
-low-rate output latch
- |
- +-- D0..D7
- +-- A0..A2
- +-- R/W
- +-- /CS
- +-- /RESET
-
-PPU /INT ----------------------> MCU direct input
+$2000: A2 A1 = 00
+$2001: A2 A1 = 00
+$2006: A2 A1 = 11
+$2007: A2 A1 = 11
 ```
 
-Fourteen direct controller outputs can then become approximately three serial-control GPIOs while `/INT` remains direct.
+Therefore PPU CPU address pins `A1` and `A2` are physically tied together and driven by one MCU signal, `PPU_A12_PAIR`.
 
-Approximate controller budget with this architecture:
+`A0` remains separate.
+
+This selects exactly the four useful states:
 
 ```text
-Game Boy capture             6
-PPU EXT output               4
-serialized PPU host control  3
-PPU /INT                     1
-clock-generator control      2
-palette button               1
-------------------------------
-mandatory total             17 GPIO
-
-optional P14/P15            +2
-------------------------------
-DMG / SGB planned total     19 GPIO
+PAIR A0 = 00 -> $2000
+PAIR A0 = 01 -> $2001
+PAIR A0 = 10 -> $2006
+PAIR A0 = 11 -> $2007
 ```
 
-This leaves comfortable space for diagnostics and UART on a Pico-class module.
+No external logic is required.
 
-The tradeoff is that a pure output shift-register implementation does not automatically provide PPU data-bus reads. Before freezing this architecture, firmware bring-up must determine whether V1 actually requires direct `PPUSTATUS` reads or whether `/INT` plus deterministic reset/startup timing is sufficient. If reads are required, an input path or a different low-rate bus solution must be added.
+### SET — Share MCU `EXT0..EXT3` with PPU CPU `D0..D3`
 
-This is currently a **preferred optimization to investigate**, not yet a SET schematic decision.
+Each of the four timing-critical EXT output GPIOs also connects to the corresponding low-nibble PPU CPU data input:
 
-## RP2040 / Raspberry Pi Pico
+```text
+MCU EXT0_DATA0 -> PPU EXT0 + CPU D0
+MCU EXT1_DATA1 -> PPU EXT1 + CPU D1
+MCU EXT2_DATA2 -> PPU EXT2 + CPU D2
+MCU EXT3_DATA3 -> PPU EXT3 + CPU D3
+```
 
-Current leading candidate, but the explicit I/O budget changes how it should be evaluated.
+This is possible because:
 
-RP2040 provides:
+- V1 keeps PPU `R/W` LOW, so the CPU data pins are never intentionally used as PPU outputs;
+- `/CS` remains inactive during normal pixel output;
+- register writes occur at low rate and preferably in VBlank;
+- the momentary EXT value present during a register write is irrelevant to the visible image when performed in the safe interval.
 
-- 264 KiB SRAM,
-- PIO state machines,
-- DMA,
-- 30 user GPIO at the chip level,
-- inexpensive modules,
-- mature toolchain,
-- enough memory to choose robust full-frame buffering instead of clever minimum-buffer schemes.
+This removes four additional MCU pins without a mux or latch.
 
-A standard Raspberry Pi Pico exposes 26 multifunction GPIOs. Therefore:
+Bench validation must still confirm there is no unexpected loading or contention on the selected RP2C02/clone.
 
-- **bare RP2040 + fully direct interface:** electrically possible only with essentially zero GPIO margin once optional SGB `P14/P15` are reserved; not attractive as the final pin plan;
-- **Pico module + fully direct interface:** does not meet the current 28/30-pin direct budget;
-- **RP2040/Pico + serialized low-rate PPU host bus:** becomes comfortably viable and remains a strong candidate.
+## Optimized controller I/O contract
 
-The final RP2040 decision should therefore be based on a complete PIO/DMA **and pin-resource map**, not simply on SRAM and processing performance.
+| Function | Signals at MCU | Direction | GPIO | Timing | Notes |
+|---|---|---:|---:|---|---|
+| Game Boy pixels | `LD0`, `LD1` | in | 2 | pixel-rate | 5 V source; use RP2350 FT GPIO |
+| Game Boy pixel clock | `CP` | in | 1 | pixel-rate | 5 V source; FT GPIO |
+| Game Boy timing | `CPL`, `ST`, `S` | in | 3 | deterministic | retain until bench proves one redundant |
+| SGB-lite | `P14`, `P15` | in | 2 | protocol timing | optional; use FT GPIO if 5 V |
+| EXT + PPU D0..D3 shared | `EXT0_DATA0..EXT3_DATA3` | out | 4 | pixel-rate | contiguous PIO group preferred |
+| PPU D4..D7 | `PPU_D4..D7` | out | 4 | low-rate | write-only bus |
+| PPU address | `PPU_A12_PAIR`, `PPU_A0` | out | 2 | low-rate | A1 and A2 physically tied |
+| PPU access | `/CS` | out | 1 | low-rate | external pull-up for safe MCU reset state |
+| PPU VBlank | `/INT` | in | 1 | frame-rate | open-drain; pull up to MCU-safe rail |
+| Clock generator | `SDA`, `SCL` | I/O,out | 2 | low-rate | Si5351A proposal |
+| Palette button | `PALETTE_BUTTON` | in | 1 | human-rate | internal RP2350 pull-up can be used |
 
-## RP2350
+### Final GPIO budget
 
-RP2350 variants provide more processing margin, and some package variants provide substantially more GPIO than RP2040.
+```text
+Game Boy capture                    6
+shared EXT0..3 / PPU D0..3         4
+PPU D4..7                           4
+PPU address pair + A0               2
+PPU /CS                             1
+PPU /INT                            1
+clock-generator I2C                 2
+palette button                      1
+-------------------------------------
+mandatory DMG total                21 GPIO
 
-This makes RP2350 attractive if the project decides that a fully direct PPU control bus is more valuable than the additional glue logic required to keep RP2040/Pico.
+optional P14/P15                   +2
+-------------------------------------
+planned DMG / SGB total            23 GPIO
+```
 
-The comparison must distinguish the actual package/module used; a controller family name alone does not guarantee the required number of externally accessible pins.
+A Pico 2 exposes 26 multifunction GPIO, leaving **3 GPIO of margin** even with SGB-lite reserved.
 
-## ESP32-class devices
+Those remaining pins should be used primarily for scope/logic-analyzer markers or other 3.3 V-only diagnostics. USB CDC and SWD should be preferred over consuming two more GPIO for a permanent UART.
 
-Potentially viable, especially variants with suitable DMA/peripheral routing and enough usable GPIO.
+## Proposed Pico 2 functional placement
 
-Evaluation must focus on:
+This is the first pin-placement plan; exact PIO program constraints may adjust individual assignments before schematic freeze.
 
-- deterministic capture,
-- deterministic four-bit EXT output,
-- actual accessible GPIO count after flash/PSRAM/module constraints,
-- voltage tolerance,
-- peripheral pin-routing limitations.
+```text
+GPIO0   LD0
+GPIO1   LD1
+GPIO2   CP
+GPIO3   CPL
+GPIO4   ST
+GPIO5   S
 
-CPU clock rate alone is not evidence of suitability.
+GPIO6   EXT0 / PPU D0
+GPIO7   EXT1 / PPU D1
+GPIO8   EXT2 / PPU D2
+GPIO9   EXT3 / PPU D3
 
-## FPGA
+GPIO10  PPU D4
+GPIO11  PPU D5
+GPIO12  PPU D6
+GPIO13  PPU D7
+GPIO14  PPU A1+A2 pair
+GPIO15  PPU A0
+GPIO16  PPU /CS
+GPIO17  PPU /INT
+GPIO18  P14 optional
+GPIO19  P15 optional
+GPIO20  I2C SDA
+GPIO21  I2C SCL
+GPIO22  palette button
 
-Advantages:
+GPIO26..28  reserved for 3.3 V diagnostics / future non-5-V functions
+```
 
-- excellent deterministic timing,
-- straightforward parallel pipelines,
-- natural fit for capture/scaling/output logic,
-- pin count often easier to scale.
+Benefits of this arrangement:
 
-Currently deprioritized because the project favors low cost and hand-buildability, and many attractive FPGA parts with sufficient embedded RAM are less convenient to assemble.
+- all six DMG capture signals are contiguous;
+- `LD0/LD1` form a contiguous two-bit input field;
+- `EXT0..EXT3` form a contiguous four-bit PIO output field;
+- all expected 5 V source inputs stay off the ADC GPIO26..28;
+- SGB-lite remains present without consuming diagnostic margin.
 
-## Next controller-selection work
+## Pull-up / pull-down policy
 
-Before freezing a controller, produce one candidate pin/resource map containing:
+### External passive parts that are useful
 
-1. exact physical MCU/package or module;
-2. all required GPIO assignments;
-3. direct vs serialized PPU host-interface choice;
-4. PIO state-machine assignments for capture and EXT output;
-5. DMA channel use;
-6. framebuffer RAM placement/ownership;
-7. I2C instance/pins for clock generator;
-8. optional P14/P15 allocation;
-9. diagnostic/UART pins;
-10. voltage-level adaptation associated with each group.
+| Signal | Passive state | Reason |
+|---|---|---|
+| PPU `/RESET` | pull-up to +5 V | defined inactive reset without MCU GPIO; test pad may pull low |
+| PPU `/CS` | pull-up to a validated logic-high rail, preferably MCU-safe 3.3 V if PPU threshold allows | keeps PPU deselected while MCU pins are in reset/default state |
+| PPU `/INT` | pull-up to 3.3 V | `/INT` is open-drain and becomes directly MCU-safe |
+| I2C `SDA/SCL` | normal I2C pull-ups to 3.3 V | required for reliable clock-generator bus |
 
-## Decision rule
+### Use MCU internal pull where appropriate
 
-Choose the **simplest low-cost part and interface topology that demonstrates the complete deterministic data path on hardware while retaining practical GPIO margin**.
+`PALETTE_BUTTON` should use an RP2350 internal pull-up with the switch to GND unless EMC/noise testing later justifies an external resistor.
+
+### Do not add pulls casually
+
+Do not add default pulls to:
+
+- `LD0`, `LD1`, `CP`, `CPL`, `ST`, `S`;
+- `P14`, `P15`;
+- `EXT0..EXT3`.
+
+These are actively driven interfaces; unnecessary pulls add load and can interfere with timing or SGB/joypad signaling.
+
+## Why the former shift-register proposal is no longer preferred
+
+The earlier 17/19-GPIO serialized PPU-host-bus idea remains technically possible, but it adds at least one glue-logic stage and complicates reads/bring-up.
+
+With RP2350/Pico 2 and the direct pin-sharing decisions above, the project fits in 23 GPIO with no PPU bus expander or latch. Therefore external serialization is **not the V1 baseline**.
+
+## Remaining electrical checks before schematic freeze
+
+The architecture is SET, but bench validation must still confirm:
+
+1. 3.3 V RP2350 outputs are accepted reliably by RP2C02/selected clone CPU and EXT inputs;
+2. the shared `EXT0..3` / `D0..3` nets do not create loading or contention;
+3. `/CS` high level and pull-up rail are valid for both PPU and MCU;
+4. `/INT` open-drain behavior with a 3.3 V pull-up;
+5. actual DMG/SGB source levels on all eight possible source inputs;
+6. PIO/DMA timing with the proposed contiguous GPIO placement.
+
+If one of these measurements requires a buffer, add only the smallest interface stage required by that measured problem.
