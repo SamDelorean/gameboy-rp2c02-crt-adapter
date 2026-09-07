@@ -1,6 +1,10 @@
 # Game Boy RP2C02 CRT Adapter
 
-An open hardware/firmware research project for displaying the original Nintendo Game Boy DMG LCD pixel stream on an NTSC CRT by reusing an NES-compatible **RP2C02-class PPU** as raster generator, palette/colorization stage, and composite-video source.
+An open hardware and firmware project to connect a **Nintendo Game Boy** to a television/CRT by using the video PPU from the original **Nintendo Entertainment System / NES** (**RP2C02**) as the final NTSC video generator.
+
+In simple terms, the project takes the Game Boy's LCD pixel data, adapts and scales it digitally, and feeds it to the NES video chip so that the Game Boy image can be displayed as standard composite NTSC video on a television.
+
+The same architecture also allows the four Game Boy shades to be mapped to NES colors, with optional lightweight Super Game Boy palette support.
 
 > **Project status:** architecture and component-selection phase. No production-ready schematic or validated firmware release exists yet.
 
@@ -20,11 +24,12 @@ Game Boy DMG / SGB-CPU
         |
         | EXT0..EXT3
         v
- RP2C02-compatible NTSC PPU
+ NES / Nintendo video PPU
+       (RP2C02)
         |
         | composite NTSC
         v
-       CRT
+   television / CRT
 ```
 
 A common frequency reference is planned for both the PPU and a modified Game Boy clock so that the two frame domains remain locked rather than free-running.
