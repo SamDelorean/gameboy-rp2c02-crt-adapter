@@ -1,16 +1,14 @@
 # Firmware Architecture and Operating Principles
 
-This document records the **software design basis** of the project. It is intentionally more specific than a normal implementation note: the goal is that the firmware can be reimplemented on another controller without having to reconstruct the reasoning from the project history.
+This document records the **software design basis** of the project. The goal is that the firmware can be reimplemented on another controller without reconstructing the design history from chat logs.
 
-The first implementation should favor **simple, deterministic algorithms** over general-purpose video-processing techniques.
+The first implementation favors **small deterministic state machines** over general-purpose video-processing techniques.
 
 ## 1. Fundamental design rule
 
-The firmware is not a video converter in the conventional sense.
+The firmware is not a generic video converter. It does not decode analog video, emulate an NES, or perform arbitrary resampling.
 
-It does not decode an analog signal, perform arbitrary resampling, emulate an NES, or synthesize a framebuffer at a higher color depth.
-
-Its job is deliberately narrow:
+Its narrow job is:
 
 ```text
 DMG LCD stream
@@ -19,23 +17,21 @@ DMG LCD stream
 capture 2-bit pixels
     |
     v
-complete source framebuffer
+complete 160 x 144 source framebuffer
     |
     v
-fixed integer/rational repetition scaler
+aspect-correct repetition scaler
     |
     v
-2-bit shade -> RP2C02 palette index
+pillarbox insertion + palette index
     |
     v
 EXT0..EXT3
 ```
 
-The RP2C02-compatible PPU remains responsible for NTSC raster timing, palette lookup/color generation, and composite-video output.
+The RP2C02-compatible PPU remains responsible for NTSC raster timing, color generation and composite-video output.
 
-## 2. Firmware modules
-
-The logical modules are:
+## 2. Logical firmware modules
 
 ```text
 clock_init
@@ -50,7 +46,7 @@ user_input
 diagnostics
 ```
 
-The physical implementation may merge modules where appropriate, but these responsibilities should remain conceptually separate.
+The implementation may merge modules physically, but these responsibilities should remain conceptually separate.
 
 ## 3. Source image representation
 
@@ -62,198 +58,175 @@ The Game Boy DMG active image is:
 4 shades
 ```
 
-A complete source frame therefore requires:
+One source frame requires:
 
 ```text
-160 x 144 x 2 bits = 46,080 bits = 5,760 bytes
+160 x 144 x 2 bits = 5,760 bytes
 ```
 
-The baseline design uses **two complete source framebuffers**:
+Version 1 uses two complete source framebuffers:
 
 ```text
 2 x 5,760 = 11,520 bytes = 11.25 KiB
 ```
 
-This is intentional. RAM minimization is not a design objective for version 1.
+The buffers store only the original DMG shade indices, not RGB values and not a pre-scaled image.
 
-### Suggested packing
-
-A natural packed format is four 2-bit pixels per byte:
-
-```text
-bit 7..6 = pixel n
-bit 5..4 = pixel n+1
-bit 3..2 = pixel n+2
-bit 1..0 = pixel n+3
-```
-
-The exact bit order may be changed if the capture peripheral makes another arrangement more efficient, but it must be documented and isolated behind access helpers/macros so that the scaler and tests do not depend on an undocumented packing convention.
+A practical packed representation is four 2-bit pixels per byte. The exact bit order may be chosen to suit the capture peripheral but must be documented and isolated behind access helpers.
 
 ## 4. Ping-pong framebuffer ownership
 
-Use two complete buffers:
+- **BACK** receives the frame currently being captured from the DMG.
+- **FRONT** contains the last complete frame being displayed.
+- FRONT and BACK exchange roles only at a defined complete-frame boundary.
+- The output path must never read from a buffer while the capture path modifies it.
 
-- **back buffer**: receives the frame currently being captured from the DMG;
-- **front buffer**: is read by the output/scaler path.
-
-The two roles are exchanged only at a defined complete-frame boundary.
-
-The intended state machine is:
+Conceptually:
 
 ```text
 capture frame N into BACK
         |
-        v
-frame N complete
+frame complete
         |
-        v
-mark BACK complete
+mark BACK valid
         |
-        v
-at safe presentation boundary:
+at safe presentation boundary
 FRONT <-> BACK
         |
-        v
 capture frame N+1 while displaying frame N
 ```
 
-### Invariant
+If a captured frame is incomplete or corrupt, discard it and continue displaying the last valid FRONT frame.
 
-The output path must never read from the buffer currently being modified by the capture path.
+## 5. Aspect-correct presentation is the baseline
 
-This avoids tearing and makes timing analysis much simpler than a line-buffer design.
+Version 1 does **not** stretch the 160 x 144 Game Boy image across the complete 256 x 240 PPU raster.
 
-## 5. Why fixed nearest-neighbor scaling
-
-The source and destination dimensions have exact rational relationships:
+The selected presentation is:
 
 ```text
-horizontal: 256 / 160 = 8 / 5
-vertical:   240 / 144 = 5 / 3
+11 black | 234-dot Game Boy picture | 11 black
+          x 240 lines high
 ```
 
-Therefore there is no reason to use:
+The Game Boy image therefore fills the raster height while preserving its intended geometry much more closely on an NTSC CRT.
 
-- bilinear interpolation,
-- bicubic interpolation,
-- floating-point arithmetic,
-- arbitrary-ratio resampling,
-- filtering kernels,
-- fractional frame accumulation.
+This is the fixed version-1 scaling mode. Alternate stretch/crop modes are not part of the baseline user interface.
 
-The desired aesthetic is also appropriate for Game Boy graphics: preserve each original 2-bit pixel value exactly and enlarge only by **repetition**.
+See [`../docs/scaling.md`](../docs/scaling.md) for the derivation and reference mapping.
 
-## 6. Horizontal scaler: 160 -> 256
+## 6. Vertical scaler: 144 -> 240
 
-Every group of five source pixels becomes eight output pixels.
-
-A center-phased nearest-neighbor repetition pattern is:
+The vertical relationship is exact:
 
 ```text
-source:   A B C D E
-repeat:   2 1 2 1 2
-output:   A A B C C D E E
+240 / 144 = 5 / 3
 ```
 
-This pattern is repeated exactly 32 times:
+Every three source lines become five output lines:
 
 ```text
-32 groups x 5 source pixels = 160
-32 groups x 8 output pixels = 256
+source: L0 L1 L2
+repeat:  2  1  2
+output: L0 L0 L1 L2 L2
 ```
 
-### Preferred implementation
+Repeat the pattern 48 times per frame:
 
-Do not calculate a division for each destination pixel if the target peripheral architecture makes a periodic generator simpler.
+```text
+48 x 3 = 144 source lines
+48 x 5 = 240 output lines
+```
 
-Conceptually:
+No interpolation, filtering or floating point is required.
+
+## 7. Horizontal scaler: 160 -> 234
+
+The horizontal scaler emits every source pixel at least once and duplicates only the additional pixels required to reach 234 output dots.
+
+```text
+160 original emissions
++ 74 duplicate emissions
+= 234 output dots
+```
+
+Each source pixel is therefore emitted either once or twice.
+
+A simple integer accumulator is sufficient:
 
 ```c
-static const uint8_t h_repeat[5] = {2, 1, 2, 1, 2};
+error = centered_initial_phase;
 
-for each source line:
-    for group = 0..31:
-        for phase = 0..4:
-            pixel = next_source_pixel();
-            emit pixel h_repeat[phase] times;
+for (x = 0; x < 160; x++) {
+    pixel = source[x];
+    emit(pixel);
+
+    error += 74;
+    if (error >= 160) {
+        emit(pixel);
+        error -= 160;
+    }
+}
 ```
 
-The actual implementation may instead use PIO/DMA descriptors, a lookup table, unrolled code, or a small state machine.
+The initial phase should distribute duplicates without visible left/right bias.
 
-The **observable mapping must remain equivalent**.
-
-## 7. Vertical scaler: 144 -> 240
-
-Every group of three source lines becomes five output lines.
-
-Use the analogous center-phased pattern:
+For verification, the center-sampled reference mapping is:
 
 ```text
-source lines: L0 L1 L2
-repeat:        2  1  2
-output:       L0 L0 L1 L2 L2
+source_x = floor((output_x + 0.5) * 160 / 234)
 ```
 
-This pattern is repeated exactly 48 times:
+for `output_x = 0..233`.
+
+The resulting line contains:
+
+- 86 source pixels emitted once;
+- 74 source pixels emitted twice;
+- 234 output image dots total.
+
+Since `gcd(160,234)=2`, an implementation may alternatively store a fixed 80-source-pixel -> 117-output-dot repetition pattern and use it twice per line.
+
+## 8. Pillarbox generation
+
+Each visible PPU line is generated as:
 
 ```text
-48 groups x 3 source lines = 144
-48 groups x 5 output lines = 240
+11 black dots
+234 scaled image dots
+11 black dots
 ```
 
-### Preferred implementation
-
-```c
-static const uint8_t v_repeat[3] = {2, 1, 2};
-
-for source_line_group = 0..47:
-    for phase = 0..2:
-        line = source_line[phase];
-        output_scaled_line(line) v_repeat[phase] times;
-```
-
-Again, the real implementation may be a DMA/PIO state machine rather than literal C loops.
-
-## 8. Equivalent coordinate mapping
-
-For verification and reference, the same center-phased nearest-neighbor mapping can be expressed mathematically as:
+Total:
 
 ```text
-source_x = floor((output_x + 0.5) * 160 / 256)
-source_y = floor((output_y + 0.5) * 144 / 240)
+11 + 234 + 11 = 256
 ```
 
-which reduces to:
+The black side bars are generated directly by the output state machine. They are **not** written into the Game Boy framebuffer.
 
-```text
-source_x = floor((output_x + 0.5) * 5 / 8)
-source_y = floor((output_y + 0.5) * 3 / 5)
-```
+The black value should use a known safe PPU palette/index strategy and should not change merely because the user selects another Game Boy palette.
 
-The periodic repetition tables above are preferred because they make the implementation and timing obvious.
+## 9. No scaled framebuffer is required
 
-## 9. No intermediate 256 x 240 framebuffer is required
+Version 1 stores only the original 160 x 144 source frame.
 
-Version 1 should store the **160 x 144 source frame only**.
+Neither a 234 x 240 framebuffer nor a 256 x 240 framebuffer is required. Scaling and pillarbox insertion happen while FRONT is read for output.
 
-The 256 x 240 representation can be generated while reading the front buffer for output.
+Advantages:
 
-This provides several advantages:
-
+- no full-frame scaling copy;
 - less RAM traffic;
 - less memory use;
-- no extra full-frame copy;
-- scaling behavior is deterministic;
-- palette changes do not require rewriting pixels;
+- deterministic mapping;
+- palette changes never rewrite pixels;
 - the framebuffer remains a faithful copy of the original DMG shade data.
 
-If a future controller architecture benefits materially from a pre-scaled buffer, that may be evaluated separately, but it is not the baseline design.
+A scaled framebuffer may be reconsidered only if measurements on the final controller show a compelling implementation benefit.
 
-## 10. Pixel values remain palette-independent
+## 10. Palette-independent pixels
 
-The framebuffer stores **shade indices**, not RGB values.
-
-Conceptually:
+The framebuffer stores shade indices only:
 
 ```text
 00 = DMG shade 0
@@ -262,31 +235,25 @@ Conceptually:
 11 = DMG shade 3
 ```
 
-The active palette determines what RP2C02 color each shade becomes.
+The selected palette determines which RP2C02 color each shade becomes.
 
-Therefore changing palette does not alter the framebuffer and does not invoke the scaler.
+Therefore:
 
-```text
-2-bit framebuffer pixel
-        |
-        +--> EXT1:EXT0
+- scaling duplicates shade indices, not colors;
+- changing the palette does not touch FRONT/BACK;
+- manual and SGB-derived palettes use the same output path.
 
-palette/bank selection
-        |
-        +--> EXT3:EXT2 (as required by the selected mode)
-```
-
-The exact EXT coding is kept behind the output module so that future palette-bank use does not contaminate the capture/scaler code.
+The exact EXT coding remains isolated inside the output module.
 
 ## 11. DMG capture path
 
-Capture must be deterministic and peripheral/DMA driven where practical.
+Capture must be deterministic and peripheral/DMA-driven where practical.
 
-For the final target controller, document explicitly:
+The final implementation must document:
 
-- which physical DMG signal qualifies a valid pixel;
-- the sampling edge;
-- LD0/LD1 bit significance;
+- which DMG signal qualifies a valid pixel;
+- sampling edge;
+- LD0/LD1 significance;
 - active-line start/end recognition;
 - active-frame start/end recognition;
 - blanking handling;
@@ -295,179 +262,172 @@ For the final target controller, document explicitly:
 - overrun behavior;
 - malformed/incomplete-frame behavior.
 
-### Important rule
+Do not assume all 456 DMG clocks in a line correspond to visible pixels. Only the 160 active LCD pixels are stored.
 
-Do not assume that all 456 DMG dots of a line correspond to the 160 visible pixels.
+## 12. RP2C02 EXT output path
 
-Only the active LCD pixel burst is captured into the framebuffer. The precise relationship must be validated against hardware measurements/documentation before the capture state machine is frozen.
+EXT0..EXT3 output must be deterministic and independent of ordinary foreground interrupt latency.
 
-## 12. Output path
-
-The RP2C02 EXT stream must be deterministic and must not depend on foreground CPU interrupt latency.
-
-Preferred mechanisms include:
+Preferred mechanisms:
 
 - PIO/state-machine output;
 - DMA-fed peripheral output;
-- equivalent deterministic hardware peripheral on the final controller.
+- equivalent deterministic hardware on the final controller.
 
-Pixel-rate GPIO bit-banging from ordinary interrupts is explicitly outside the intended architecture.
+Pixel-rate GPIO bit-banging from ordinary interrupts is outside the intended architecture.
 
 ## 13. Frame synchronization
 
-The project intentionally modifies/controls the DMG clock so that the DMG frame period and the RP2C02 frame period can be locked to a common reference.
+The project intentionally controls the Game Boy clock so that the DMG frame period and the simplified RP2C02 frame period derive from a common timing reference.
 
-Working values are documented elsewhere, but the firmware architecture assumes:
+Firmware assumes:
 
 ```text
-one completed DMG source frame
+one complete DMG source frame
         corresponds to
-one RP2C02 output frame
+one complete RP2C02 output frame
 ```
 
-The RP2C02 `/INT` VBlank output is the preferred presentation reference for:
+The RP2C02 `/INT` VBlank output is the preferred safe reference for:
 
-- front/back buffer exchange;
-- palette updates;
-- user-interface state changes;
-- optional diagnostics.
+- FRONT/BACK presentation changes;
+- palette writes;
+- low-rate user-interface state changes;
+- diagnostics.
 
-The exact swap point must be chosen so the output engine never changes source buffers in the middle of the visible picture.
+The two source framebuffers solve capture/display ownership and tearing; they are not a frame-rate-conversion reservoir.
 
-## 14. Palette handling
+## 14. Palette handling and one-button UI
 
-Palette selection is deliberately simple.
+Version 1 uses one momentary button.
 
-The user has one button that cycles through a curated list of complete four-color palettes.
+Recommended mode cycle:
 
-Conceptually:
-
-```c
-if (button_pressed) {
-    palette_index = (palette_index + 1) % palette_count;
-    palette_pending = true;
-}
-
-if (vblank && palette_pending) {
-    ppu_load_palette(palettes[palette_index]);
-    palette_pending = false;
-}
+```text
+AUTO/SGB
+manual preset 1
+manual preset 2
+...
+manual preset N
+-> AUTO/SGB
 ```
 
-Palette writes should occur during a safe VBlank interval.
+Visible palette writes occur during VBlank or another verified safe PPU interval.
 
-No per-pixel or per-region color computation is required in manual mode.
+Manual user selection has priority over incoming SGB palette traffic. A button press while an SGB-derived palette is visible exits AUTO/SGB and selects a manual preset.
 
 ## 15. Optional SGB-lite path
 
-The passive SGB listener is an independent optional input path.
+Optional inputs:
+
+```text
+P14
+P15
+```
+
+Initial direct commands of interest:
+
+```text
+PAL01
+PAL23
+PAL03
+PAL12
+```
+
+Processing model:
 
 ```text
 P14/P15
    |
 packet decoder
    |
-direct SGB palette command
+RGB555 palette
    |
-RGB555 -> nearest suitable RP2C02 colors
+convert to suitable RP2C02 colors
    |
-normal palette-loading mechanism
+cache palette
+   |
+apply only if AUTO/SGB is selected
 ```
 
-Initial direct commands:
+The SGB path does not alter capture, framebuffer or scaling logic.
 
-- `PAL01`
-- `PAL23`
-- `PAL03`
-- `PAL12`
+While a manual preset is active, SGB packets may still be decoded and cached but must not replace the visible palette.
 
-The SGB path does **not** alter the capture or scaling algorithms.
+## 16. Boot sequence
 
-If no usable SGB command appears, the normal manual palette remains active.
+Recommended initial sequence:
 
-## 16. Overscan / border behavior
-
-Version 1 uses fixed black outside the Game Boy picture area where the chosen PPU/EXT timing requires an explicit border value.
-
-This behavior should be generated by the output state machine, not written into the source framebuffer.
-
-The border is not a user-facing option in version 1.
-
-## 17. Boot sequence
-
-Recommended sequence:
-
-1. Put all GPIO in electrically safe states.
-2. Hold the RP2C02-compatible PPU in reset.
-3. Configure/start the common clock system as required.
-4. Initialize capture and deterministic output peripherals.
-5. Initialize framebuffer ownership/state.
+1. Place GPIO in safe states.
+2. Hold the PPU in reset.
+3. Configure/start the common clock system.
+4. Initialize capture and output peripherals.
+5. Initialize framebuffer ownership.
 6. Release and initialize the PPU.
-7. Load a known safe default palette.
-8. Capture one complete valid DMG frame into the back buffer.
-9. Promote it to front buffer at the defined boundary.
+7. Load a known safe default palette and black pillarbox value.
+8. Capture one complete valid DMG frame into BACK.
+9. Promote it to FRONT at the defined boundary.
 10. Start normal EXT output.
 11. Enter steady-state operation.
 
-## 18. Error philosophy
+## 17. Error philosophy
 
-Version 1 should fail visibly and predictably rather than attempting elaborate recovery algorithms.
+Version 1 should fail visibly and predictably rather than implement elaborate recovery algorithms.
 
 Examples:
 
-- incomplete DMG frame: discard it and retain the previous front frame;
-- capture overrun: flag diagnostic state and do not present the corrupted buffer;
-- missing SGB packet: ignore it;
-- invalid SGB packet: discard it;
-- palette update missed during VBlank: defer to the next VBlank;
-- button bounce: debounce at low rate; never let it affect pixel timing.
+- incomplete frame -> discard and retain previous FRONT;
+- capture overrun -> flag diagnostic state and do not present corrupted buffer;
+- invalid SGB packet -> discard;
+- missed palette VBlank -> defer to next VBlank;
+- button bounce -> debounce outside pixel timing.
 
-The last known complete framebuffer should remain displayable whenever possible.
+## 18. Diagnostics are part of the product
 
-## 19. Diagnostics are part of the design
-
-The firmware should provide explicit bench modes for:
+Maintain reproducible bench modes for:
 
 - fixed EXT color;
 - four-color bars;
 - checkerboard;
-- horizontal-line pattern;
-- vertical-line pattern;
+- horizontal and vertical line patterns;
 - framebuffer address/count pattern;
+- black-bar geometry markers;
 - VBlank indicator;
 - capture frame counter;
 - optional timing GPIO markers.
 
-These modes are not disposable debug code. They form the reproducible validation procedure for the controller, the RP2C02, and compatible clone PPUs.
+These are part of the validation procedure, not disposable debug code.
 
-## 20. Controller-independent invariants
+## 19. Controller-independent invariants
 
-Even if the final controller changes from RP2040 to another MCU/FPGA, retain these principles unless a documented design revision explicitly supersedes them:
+Unless a documented design revision supersedes them:
 
-1. Capture the original 2-bit DMG LCD data directly.
-2. Keep two complete 160 x 144 source buffers in version 1.
-3. Never modify the front buffer while it is being displayed.
-4. Scale only by deterministic nearest-neighbor repetition.
-5. Horizontal scaling is exactly 5 source pixels -> 8 output pixels.
-6. Vertical scaling is exactly 3 source lines -> 5 output lines.
-7. Do not require a 256 x 240 intermediate framebuffer.
-8. Keep pixel storage independent of palette/color values.
-9. Drive EXT deterministically with hardware-assisted I/O.
-10. Perform palette updates at a safe PPU interval.
-11. Keep SGB support optional and independent of normal operation.
-12. Prefer a small number of transparent state machines over clever generalized video-processing code.
+1. Capture the original 2-bit DMG LCD stream directly.
+2. Keep two complete 160 x 144 source buffers.
+3. Never modify FRONT while it is being displayed.
+4. Preserve the Game Boy image aspect rather than stretching it to the full 256-dot width.
+5. Present the image as 234 x 240 inside the 256 x 240 raster.
+6. Generate 11 black dots on each side.
+7. Scale vertically by exact 3-source-lines -> 5-output-lines repetition.
+8. Scale horizontally by deterministic 160 -> 234 one-or-two-times pixel repetition.
+9. Do not require a 234 x 240 or 256 x 240 intermediate framebuffer.
+10. Keep pixel storage independent of palette/color values.
+11. Drive EXT with hardware-assisted deterministic I/O.
+12. Perform palette changes during a safe PPU interval.
+13. Keep SGB support optional and subordinate to manual user control.
+14. Prefer transparent integer state machines over generalized graphics algorithms.
 
-## 21. Rationale
+## 20. Rationale
 
-The purpose of these choices is not merely to reduce code size.
+The chosen architecture is intentionally simple:
 
-They make the system:
+- preserve the original Game Boy geometry;
+- fill the CRT vertically;
+- tolerate the remaining width with small black pillarbox bars;
+- avoid interpolation and floating point;
+- avoid a general-purpose video scaler;
+- avoid a scaled framebuffer;
+- remain easy to verify with an oscilloscope or logic analyzer;
+- remain portable to another MCU or FPGA.
 
-- easier to understand;
-- easier to validate on an oscilloscope/logic analyzer;
-- easier to port;
-- easier for another contributor to reproduce;
-- less sensitive to CPU load;
-- less likely to hide timing errors behind large software abstractions.
-
-The project should remain a **small deterministic bridge between two pieces of period video hardware**, not evolve accidentally into a generic graphics processor.
+The project should remain a **small deterministic bridge between two pieces of period video hardware**, not evolve into a generic graphics processor.
