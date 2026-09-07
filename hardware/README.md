@@ -1,6 +1,12 @@
 # Hardware
 
-No production-ready schematic has been released yet.
+A first **connection-level schematic basis** now exists for the central V1 signal path:
+
+- [`schematic-v0.1.md`](schematic-v0.1.md) — Game Boy DMG / SGB → Raspberry Pi Pico 2 → RP2C02 interconnect schematic;
+- [`netlist-v0.1.csv`](netlist-v0.1.csv) — exact V0.1 connectivity table suitable for later KiCad capture/checking;
+- [`interfaces.md`](interfaces.md) — broader signal/electrical contract and validation notes.
+
+This is **not yet a production-ready PCB schematic**. It deliberately freezes the central interconnection while keeping clock generation, power implementation and downstream analog/video output as separate subsystems.
 
 ## Compatibility target
 
@@ -10,30 +16,57 @@ The common video path should be reusable anywhere the required Game Boy LCD data
 
 Do not assume every SGB implementation is electrically identical to a DMG. Any SGB/SGB-CPU installation used by the project must have its exact signal access, voltage levels, loading and clock interface documented and validated.
 
-## Planned schematic blocks
+## V0.1 schematic partition
 
-1. Power and decoupling
-2. Game Boy DMG / SGB video-source input conditioning
-3. Common clock generation
-4. Digital controller / programming
-5. RP2C02-compatible PPU control bus
-6. `EXT0..EXT3` interface
-7. Composite-video output
-8. Palette button
-9. Optional `P14/P15` SGB header/test points
-10. Border/output composition block in firmware interface definition
-11. Debug/test points
+The first schematic sheet is intentionally limited to:
+
+```text
+Game Boy DMG / SGB source taps
+          |
+          v
+Raspberry Pi Pico 2 / RP2350
+          |
+          v
+RP2C02-compatible NTSC PPU
+```
+
+The following are represented only by off-sheet flags/interfaces:
+
+- `PPU_CLK_IN` → PPU clock input, target ~21.4772727 MHz NTSC;
+- `GB_CLK_IN` → synchronized Game Boy/SGB clock-injection point, current target ~4.2203555 MHz;
+- `PPU_VIDEO_RAW` ← RP2C02 pin 21 `VOUT`;
+- PPU 5 V supply and Pico 2 power input.
+
+This separation is deliberate. The clock generator will be developed as its own circuit. The raw PPU video node will feed a later, independent output stage.
+
+## Video-output scope
+
+The V0.1 sheet ends at `PPU_VIDEO_RAW`.
+
+The RP2C02 raw composite output is not treated as a finished 75-ohm television output. A minimal stock-style composite amplifier may be documented later as a separate sheet.
+
+Other existing NES video modifications — for example S-Video-oriented, HDMI-oriented or other downstream approaches — may be reusable in principle, but they are outside the baseline Game Boy capture/scaler/EXT design and must be validated independently. The central project should not become dependent on any one downstream video-output modification.
+
+## Planned schematic sheets / blocks
+
+1. **Central interconnect V0.1** — DMG/SGB taps, Pico 2, RP2C02, passives, button, raw video handoff. **Defined.**
+2. **Clock generation** — common reference and separate `PPU_CLK_IN` / `GB_CLK_IN` outputs. **Separate / pending.**
+3. **Power** — final 5 V / Pico VSYS sourcing, filtering and sequencing. **Pending.**
+4. **Video output** — raw PPU VOUT buffering / 75-ohm composite stage or other optional downstream implementation. **Pending.**
+5. Optional prototype/debug/test-point sheet or carrier-board details as required.
 
 ## Hardware priorities
 
 - Favor hand-solderable packages or castellated modules for prototypes.
+- Use Raspberry Pi Pico 2 / RP2350 as the V1 controller basis.
+- Minimize additional logic ICs; use direct GPIO sharing and fixed/passive PPU states where validated.
 - Avoid BGA unless a later design has a compelling reason.
 - Keep the PPU electrically replaceable where practical.
 - Expose useful clocks and sync/debug nodes.
 - Reserve optional `P14/P15` without making them mandatory for normal operation.
 - Treat DMG and SGB compatibility as measured properties of the source interface.
 - Treat clone PPU compatibility as a measured property.
-- Do not freeze the level-shifting solution until the actual source/controller/PPU voltage requirements are checked.
+- Add buffers/level shifting only where actual measurements show they are required.
 
 ## Preferred donor Game Boy for experimentation
 
@@ -70,14 +103,12 @@ The baseline board should, where practical, expose enough test pads/header optio
 - PPU supply
 - Game Boy frame/line timing reference
 - PPU `/INT`
-- PPU master clock
-- modified Game Boy source clock
+- `PPU_CLK_IN`
+- `GB_CLK_IN`
 - `EXT0`
 - `EXT1`
 - `EXT2`
 - `EXT3`
 - optional `P14`
 - optional `P15`
-- composite output
-
-See [`interfaces.md`](interfaces.md) for the draft signal inventory.
+- `PPU_VIDEO_RAW`
