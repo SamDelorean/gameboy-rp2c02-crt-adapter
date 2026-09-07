@@ -1,6 +1,10 @@
 # Adaptador CRT Game Boy RP2C02
 
-Proyecto abierto de hardware y firmware para tomar directamente la señal LCD de un **Game Boy DMG**, reconstruirla digitalmente y mostrarla en un CRT NTSC utilizando una **PPU compatible con RP2C02** como generador de raster, etapa de paleta/colorización y fuente de video compuesto.
+Proyecto abierto de hardware y firmware para **conectar un Nintendo Game Boy a una televisión CRT** utilizando como etapa final de video la **PPU del Nintendo Entertainment System / NES** (**RP2C02**).
+
+Dicho de forma sencilla: el proyecto toma la información de imagen que normalmente va a la pantalla LCD del Game Boy, la adapta y escala digitalmente, y la entrega al chip de video del Nintendo para generar una señal compuesta NTSC que pueda mostrarse directamente en una televisión.
+
+La misma arquitectura permite además asignar los cuatro tonos del Game Boy a colores de la paleta del NES y, de forma opcional, aprovechar algunas funciones ligeras de paleta del Super Game Boy.
 
 > **Estado:** fase de arquitectura y selección de componentes. Todavía no existe un esquemático de producción ni firmware validado como versión final.
 
@@ -19,11 +23,12 @@ controlador digital económico
         v
 EXT0..EXT3
         |
-PPU RP2C02-compatible NTSC
+PPU de video del Nintendo / NES
+          (RP2C02)
         |
-video compuesto
+video compuesto NTSC
         v
-       CRT
+  televisión / CRT
 ```
 
 ## Decisiones consolidadas
