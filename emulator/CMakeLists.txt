@@ -7,6 +7,8 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 option(GBCRT_ENABLE_SAMEBOY "Build the optional SameBoy-backed ROM source" OFF)
 option(GBCRT_ENABLE_SDL2 "Build the optional live SDL2 comparison viewer" OFF)
+option(GBCRT_ENABLE_NESEMU_PPU "Use pinned johnmph/NESEmu Ricoh2C02 for the preview PPU" OFF)
+set(NESEMU_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/NESEmu" CACHE PATH "Path to the pinned johnmph/NESEmu checkout")
 set(SAMEBOY_ROOT "" CACHE PATH "Path to a SameBoy checkout with build/lib/libsameboy.a")
 
 add_library(gbcrt_core
@@ -26,6 +28,24 @@ add_library(gbcrt_core
     src/ppm.c
 )
 target_include_directories(gbcrt_core PUBLIC src)
+
+if(GBCRT_ENABLE_NESEMU_PPU)
+    enable_language(CXX)
+    set(CMAKE_CXX_STANDARD 11)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_CXX_EXTENSIONS OFF)
+
+    if(NOT EXISTS "${NESEMU_ROOT}/Source/NESEmu/Ppu.hpp")
+        message(FATAL_ERROR
+            "Pinned NESEmu PPU not found under ${NESEMU_ROOT}. Run emulator/scripts/bootstrap_nesemu.sh first or set -DNESEMU_ROOT=/path/to/NESEmu.")
+    endif()
+
+    target_sources(gbcrt_core PRIVATE
+        src/rp2c02_nesemu.cpp
+        "${NESEMU_ROOT}/Source/NESEmu/Common.cpp")
+    target_include_directories(gbcrt_core PRIVATE "${NESEMU_ROOT}/Source")
+    target_compile_definitions(gbcrt_core PUBLIC GBCRT_ENABLE_NESEMU_PPU=1)
+endif()
 
 if(GBCRT_ENABLE_SAMEBOY)
     if(NOT SAMEBOY_ROOT)
@@ -116,4 +136,10 @@ if(BUILD_TESTING)
     add_executable(test_clock_mode tests/test_clock_mode.c)
     target_link_libraries(test_clock_mode PRIVATE gbcrt_core)
     add_test(NAME clock_mode COMMAND test_clock_mode)
+
+    if(GBCRT_ENABLE_NESEMU_PPU)
+        add_executable(test_rp2c02_nesemu tests/test_rp2c02_nesemu.c)
+        target_link_libraries(test_rp2c02_nesemu PRIVATE gbcrt_core)
+        add_test(NAME rp2c02_nesemu_ext_path COMMAND test_rp2c02_nesemu)
+    endif()
 endif()
