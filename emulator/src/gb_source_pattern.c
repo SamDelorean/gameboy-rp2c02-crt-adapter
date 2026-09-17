@@ -42,6 +42,14 @@ static int pattern_next_frame(gb_source_t *source, gb_source_frame_t *frame)
     return 0;
 }
 
+static int pattern_set_key(gb_source_t *source, gb_source_key_t key, int pressed)
+{
+    (void)source;
+    (void)key;
+    (void)pressed;
+    return 0;
+}
+
 static void pattern_destroy(gb_source_t *source)
 {
     free(source->ctx);
@@ -50,6 +58,7 @@ static void pattern_destroy(gb_source_t *source)
 static const gb_source_ops_t pattern_ops = {
     .name = "pattern",
     .next_frame = pattern_next_frame,
+    .set_key = pattern_set_key,
     .destroy = pattern_destroy,
 };
 
