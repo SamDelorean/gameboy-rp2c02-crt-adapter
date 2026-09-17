@@ -39,6 +39,10 @@ static int pattern_next_frame(gb_source_t *source, gb_source_frame_t *frame)
     }
 
     frame->frame_number = ctx->frame_number++;
+    frame->sgb_palette_valid = false;
+    frame->sgb_palette_command = 0;
+    frame->sgb_palette_sequence = 0;
+    for (unsigned i = 0; i < 4; ++i) frame->sgb_palette_rgb555[i] = 0;
     return 0;
 }
 
