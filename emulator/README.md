@@ -45,7 +45,9 @@ Implemented now:
 - canonical horizontal `160 -> 234` center-sampled mapping;
 - exact vertical `144 -> 240` `2,1,2` repetition pattern;
 - `11 + 234 + 11` output composition;
+- Game Boy shades use EXT indices `0..3` while EXT index `4` is reserved for the fixed black V1 side borders;
 - reduced logical `EXT -> palette RAM` RP2C02 model;
+- all 64 six-bit RP2C02 color values are preserved by the monitor-preview LUT rather than discarding the two value/luma bits;
 - simplified RP2C02 `341x262` raster timing with visible region and VBlank boundaries;
 - deterministic 160x144 two-bit test-pattern source;
 - generic `gb_source` interface;
@@ -57,12 +59,14 @@ Implemented now:
 - dependency-free PPM frontend;
 - optional playable SDL2 frontend;
 - selectable Game Boy clock model: `STOCK` or `SYNC`;
-- automated regression tests for bridge geometry, source abstraction/joypad, RP2C02 raster timing and clock scheduling;
-- GitHub Actions build/test coverage for the dependency-free core, SDL2 viewer build and pinned SameBoy link build.
+- selectable virtual-bench RP2C02 palette presets;
+- automated regression tests for bridge geometry, source abstraction/joypad, RP2C02 color/palette behavior, RP2C02 raster timing and clock scheduling;
+- project-authored DMG boot stub and smoke-test ROM for copyright-clean functional CI;
+- GitHub Actions build/test coverage for the dependency-free core, SDL2 viewer build and pinned SameBoy functional path.
 
-The pinned SameBoy library, our adapter, and the SDL2 viewer all compile in CI. No commercial Game Boy ROM is bundled with the project.
+The pinned SameBoy library, our adapter, and the SDL2 viewer all compile in CI. The SameBoy job also executes the project-authored smoke ROM and verifies non-uniform image data independently in the SameBoy reference and RP2C02 image regions, plus black side borders. No commercial Game Boy ROM or Nintendo boot ROM is bundled with the project.
 
-The RGB LUT in `rp2c02_ext.c` is **only a provisional monitor approximation**. It is not yet a composite NTSC waveform model.
+The RGB LUT in `rp2c02_ext.c` is **only a provisional monitor approximation**. It now distinguishes all six PPU color-code bits, but it is not yet a composite NTSC waveform/decoder model. NESdev documents the RP2C02 color code as `VV HHHH`: two value bits plus four hue bits. Canonical project black remains `$0F`; color `$0D` should not be used for final presets.
 
 ## Clock comparison
 
@@ -150,7 +154,37 @@ Run a user-supplied ROM and DMG boot ROM:
 
 No commercial ROM or Nintendo boot ROM is stored in this repository.
 
-A project-authored/open test ROM and boot stub may be used in CI so the SameBoy-backed path can actually execute Game Boy code without proprietary assets.
+CI generates `gbcrt_boot_stub.bin` and `gbcrt_smoke.gb` from `emulator/tests/generate_smoke_rom.py`. These files are entirely project-authored and are used only to prove that actual Game Boy code executes inside SameBoy and reaches both comparison paths.
+
+## Alternate-output palettes
+
+Game Boy shades remain logical values `0..3`; changing the RP2C02 palette does not change SameBoy, source capture, scaling or framebuffer contents.
+
+The virtual bench currently provides a small preview set:
+
+```text
+DMG GREEN
+GRAYSCALE
+AMBER
+COOL BLUE
+LILAC
+```
+
+These are **virtual-bench presets**, not a freeze of the final hardware preset count or exact code values. The hardware design still targets a small curated set plus optional `AUTO/SGB` behavior.
+
+Within the bridge:
+
+```text
+EXT 0 -> Game Boy shade 0 (lightest)
+EXT 1 -> Game Boy shade 1
+EXT 2 -> Game Boy shade 2
+EXT 3 -> Game Boy shade 3 (darkest)
+EXT 4 -> V1 side-border color (fixed $0F black)
+```
+
+This separation is important: the fixed black side border no longer steals the palette entry required by Game Boy shade 0.
+
+In the SDL viewer, `P` requests the next preview palette. The change is committed at the comparison-frame boundary, mirroring the hardware rule that PPU palette writes occur in a VBlank-safe interval.
 
 ## Optional live SDL2 viewer
 
@@ -196,11 +230,12 @@ All Game Boy keys are released automatically when the SDL window loses focus or 
 - `Up` / `Down`: choose `STOCK` or `SYNC` while the menu is open;
 - `Enter`: apply the highlighted clock mode while the menu is open;
 - `C`: toggle `STOCK`/`SYNC` immediately;
+- `P`: cycle the alternate RP2C02 palette preset;
 - `Space`: pause/resume;
 - `Esc`: close the menu, or quit when the menu is closed;
 - `Q`: quit.
 
-The window title reports source, clock mode, Game Boy frame number, RP2C02 output-frame count and repeated-output count.
+The window title reports source, clock mode, active alternate-output palette, Game Boy frame number, RP2C02 output-frame count and repeated-output count.
 
 ## Why the SameBoy adapter works at frame level
 
@@ -248,7 +283,8 @@ The emulator models only what the hardware project depends on:
 - VBlank/frame boundaries;
 - palette RAM behavior relevant to EXT input;
 - EXT0..EXT3 external index path;
-- later, composite/NTSC color generation if useful for validation.
+- six-bit RP2C02 color values;
+- later, composite/NTSC waveform and decoder behavior only if useful for validation.
 
 CPU, APU, mappers, CHR rendering, nametables, OAM and sprites are out of scope.
 
@@ -258,8 +294,8 @@ Pinky/Visual2C02-derived tests and NESdev documentation are useful independent r
 
 `.github/workflows/emulator-ci.yml` validates three paths:
 
-1. dependency-free build, tests, and `STOCK`/`SYNC` execution;
-2. SDL2 viewer compilation and core tests;
-3. pinned SameBoy static-library/link integration and core tests.
+1. dependency-free build, regression tests, and `STOCK`/`SYNC` execution;
+2. SDL2 viewer compilation and regression tests;
+3. pinned SameBoy static-library integration, regression tests, project-authored ROM execution, and comparison-image validation.
 
-The three paths are currently expected to remain green before emulator changes are considered integrated. SameBoy and SDL2 remain optional for end users, but their integration is checked automatically so optional code does not silently rot.
+The three paths are expected to remain green before emulator changes are considered integrated. SameBoy and SDL2 remain optional for end users, but their integration is checked automatically so optional code does not silently rot.
