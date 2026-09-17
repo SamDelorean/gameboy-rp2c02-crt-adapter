@@ -49,6 +49,14 @@ static rgb8_t rgb_from_rgba(uint32_t rgba)
     };
 }
 
+int comparison_palette_button_contains(unsigned x, unsigned y)
+{
+    return x >= COMPARISON_PALETTE_BUTTON_X &&
+           x < COMPARISON_PALETTE_BUTTON_X + COMPARISON_PALETTE_BUTTON_W &&
+           y >= COMPARISON_PALETTE_BUTTON_Y &&
+           y < COMPARISON_PALETTE_BUTTON_Y + COMPARISON_PALETTE_BUTTON_H;
+}
+
 static void draw_menu(rgb8_t *canvas, const comparison_view_state_t *state)
 {
     const rgb8_t bar = {30, 30, 34};
@@ -71,9 +79,34 @@ static void draw_menu(rgb8_t *canvas, const comparison_view_state_t *state)
                       239, 16, 2, "SYNC", accent);
 
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                      360, 18, 1,
-                      "M MENU   C CLOCK   P PALETTE   SPACE PAUSE   Q QUIT",
+                      350, 18, 1,
+                      "M MENU   C CLOCK   SPACE PAUSE   Q QUIT",
                       text);
+
+    /*
+     * Virtual equivalent of the single physical palette pushbutton. It does
+     * not model an Arduino/RP2350 or debounce/timing logic; clicking it merely
+     * requests the next palette mode, exactly like pressing P.
+     */
+    rect(canvas,
+         COMPARISON_PALETTE_BUTTON_X,
+         COMPARISON_PALETTE_BUTTON_Y,
+         COMPARISON_PALETTE_BUTTON_W,
+         COMPARISON_PALETTE_BUTTON_H,
+         active);
+    frame_rect(canvas,
+               COMPARISON_PALETTE_BUTTON_X,
+               COMPARISON_PALETTE_BUTTON_Y,
+               COMPARISON_PALETTE_BUTTON_W,
+               COMPARISON_PALETTE_BUTTON_H,
+               2,
+               accent);
+    ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                      COMPARISON_PALETTE_BUTTON_X + 16,
+                      COMPARISON_PALETTE_BUTTON_Y + 9,
+                      1,
+                      "NEXT PALETTE [P]",
+                      accent);
 
     if (state && state->paused) {
         rect(canvas, 1115, 8, 145, 32, (rgb8_t){90, 60, 60});
