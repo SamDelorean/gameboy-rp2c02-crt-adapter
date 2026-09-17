@@ -16,6 +16,7 @@ typedef struct {
     int menu_selection;
     int paused;
     const char *source_name;
+    const char *palette_name;
 } comparison_view_state_t;
 
 void comparison_render(rgb8_t *canvas,
