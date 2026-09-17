@@ -71,6 +71,35 @@ jobs:
       - name: Run core tests in SDL build
         run: ctest --test-dir build/emulator-sdl --output-on-failure
 
+  nesemu-ppu-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch pinned NESEmu PPU donor
+        run: sh ./emulator/scripts/bootstrap_nesemu.sh
+
+      - name: Configure NESEmu-backed preview
+        run: |
+          cmake -S emulator -B build/emulator-nesemu \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGBCRT_ENABLE_NESEMU_PPU=ON \
+            -DNESEMU_ROOT="$GITHUB_WORKSPACE/emulator/third_party/NESEmu"
+
+      - name: Build NESEmu-backed preview
+        run: cmake --build build/emulator-nesemu --parallel
+
+      - name: Run regression and EXT-path tests
+        run: ctest --test-dir build/emulator-nesemu --output-on-failure
+
+      - name: Render one preview frame through donor PPU
+        run: |
+          ./build/emulator-nesemu/gbcrt_emu \
+            --source-model dmg \
+            --clock sync \
+            --frames 1 \
+            --out build/emulator-nesemu/preview.ppm
+
   sameboy-link-build:
     runs-on: ubuntu-latest
     steps:
@@ -79,12 +108,17 @@ jobs:
       - name: Build pinned SameBoy library
         run: sh ./emulator/scripts/bootstrap_sameboy.sh
 
+      - name: Fetch pinned NESEmu PPU donor
+        run: sh ./emulator/scripts/bootstrap_nesemu.sh
+
       - name: Configure SameBoy-backed emulator
         run: |
           cmake -S emulator -B build/emulator-sameboy \
             -DCMAKE_BUILD_TYPE=Release \
             -DGBCRT_ENABLE_SAMEBOY=ON \
-            -DSAMEBOY_ROOT="$GITHUB_WORKSPACE/emulator/third_party/SameBoy"
+            -DSAMEBOY_ROOT="$GITHUB_WORKSPACE/emulator/third_party/SameBoy" \
+            -DGBCRT_ENABLE_NESEMU_PPU=ON \
+            -DNESEMU_ROOT="$GITHUB_WORKSPACE/emulator/third_party/NESEmu"
 
       - name: Build SameBoy-backed emulator
         run: cmake --build build/emulator-sameboy --parallel
