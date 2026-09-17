@@ -42,7 +42,7 @@ The left side of the viewer is the normal SameBoy reference. The right side is t
 - 16 candidate global manual RP2C02 palettes.
 - Interactive SDL2 palette editor.
 - SGB palette support limited to one already-decoded four-color RGB555 palette supplied by SameBoy.
-- Project-authored boot stub and smoke ROM for copyright-clean CI.
+- Project-authored smoke ROM plus open-source SameBoy DMG/SGB boot ROM resources for copyright-clean CI and normal cartridge startup.
 - CI coverage for dependency-free, SDL2, donor-PPU, and SameBoy+donor-PPU builds.
 
 ## SGB scope
@@ -101,11 +101,10 @@ Run the live viewer:
 ./build/poc/gbcrt_viewer \
   --source-model dmg \
   --rom build/poc-smoke/gbcrt_smoke.gb \
-  --boot build/poc-smoke/gbcrt_boot_stub.bin \
   --clock sync
 ```
 
-For personal testing you may substitute a legally obtained Game Boy `.gb` image. No commercial ROMs are included in this repository.
+For personal testing you may substitute a legally obtained Game Boy `.gb` image. The normal DMG/SGB path uses the open-source boot ROMs compiled from the pinned SameBoy source revision; `--boot /path/to/boot.bin` is only an optional override. No commercial ROMs or proprietary Nintendo boot ROMs are included in this repository.
 
 See [`emulator/README.md`](emulator/README.md) for detailed build variants, controls, smoke tests, SameBoy integration, and donor-PPU notes.
 
@@ -140,10 +139,12 @@ Earlier RP2350/Arduino-Pico material is retained as historical prototype/referen
 
 ## Third-party dependencies
 
-The project pins but does not vendor:
+The project pins but does not vendor the emulator cores:
 
 - **SameBoy** — Game Boy source core
 - **johnmph/NESEmu** — Ricoh 2C02 donor implementation used only for the PPU preview backend
+
+Two 256-byte SameBoy open-source boot-ROM resources are embedded for DMG/SGB startup under SameBoy's Expat license.
 
 See [`emulator/THIRD_PARTY.md`](emulator/THIRD_PARTY.md).
 
