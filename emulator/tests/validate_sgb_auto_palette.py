@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
-"""Compare DMG fallback and SGB AUTO palette smoke renders.
+"""Compare DMG fallback and SameBoy-decoded SGB AUTO palette renders.
 
-The project-authored ROM draws the same static Game Boy image in both source
-models, but in SGB mode it also transmits a real PAL01 packet through JOYP.
-The left reference therefore should remain identical while the right RP2C02
-image should change color because the passive SGB-lite palette is applied.
+The virtual bench deliberately does not emulate P14/P15/JOYP transport in its
+main path. SameBoy owns SGB command decoding and supplies already-decoded
+palette state; project code only maps that palette into RP2C02 colors.
+
+The left SameBoy reference is allowed to differ in SGB mode because SameBoy may
+render its own SGB colorization there. The right RP2C02 region must differ from
+the DMG fallback result when the SGB palette is active.
 """
 
 from __future__ import annotations
@@ -43,26 +46,17 @@ def main() -> None:
     dmg = read_ppm(args.dmg)
     sgb = read_ppm(args.sgb)
 
-    # Exact video wells from comparison_render.c, excluding UI/labels.
-    left_dmg = region_bytes(dmg, 85, 150, 480, 432)
-    left_sgb = region_bytes(sgb, 85, 150, 480, 432)
     right_dmg = region_bytes(dmg, 699 + 11 * 2, 132, 234 * 2, 480)
     right_sgb = region_bytes(sgb, 699 + 11 * 2, 132, 234 * 2, 480)
 
-    if left_dmg != left_sgb:
-        raise SystemExit(
-            "source/reference video changed between DMG and SGB smoke modes; "
-            "the PAL01 test should affect only the alternate-output palette"
-        )
-
     if right_dmg == right_sgb:
         raise SystemExit(
-            "RP2C02 image did not change between fallback and SGB AUTO palette"
+            "RP2C02 image did not change between DMG fallback and SameBoy SGB AUTO palette"
         )
 
     changed = sum(a != b for a, b in zip(right_dmg, right_sgb))
     print(
-        "SGB AUTO palette OK: source image identical; "
+        "SGB AUTO palette OK: SameBoy supplied decoded palette state; "
         f"RP2C02 image changed in {changed} component bytes"
     )
 
