@@ -12,6 +12,7 @@ set(SAMEBOY_ROOT "" CACHE PATH "Path to a SameBoy checkout built with 'make lib'
 add_library(gbcrt_core
     src/bridge.c
     src/rp2c02_ext.c
+    src/rp2c02_timing.c
     src/pattern_source.c
     src/gb_source.c
     src/gb_source_pattern.c
@@ -74,4 +75,8 @@ if(BUILD_TESTING)
     add_executable(test_source tests/test_source.c)
     target_link_libraries(test_source PRIVATE gbcrt_core)
     add_test(NAME source_abstraction COMMAND test_source)
+
+    add_executable(test_rp2c02_timing tests/test_rp2c02_timing.c)
+    target_link_libraries(test_rp2c02_timing PRIVATE gbcrt_core)
+    add_test(NAME rp2c02_timing COMMAND test_rp2c02_timing)
 endif()
