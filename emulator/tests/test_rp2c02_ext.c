@@ -8,6 +8,12 @@ static int rgb_equal(rgb8_t a, rgb8_t b)
     return a.r == b.r && a.g == b.g && a.b == b.b;
 }
 
+static void set_ppu_address(rp2c02_ext_t *ppu, uint16_t address)
+{
+    rp2c02_ext_cpu_write(ppu, RP2C02_REG_ADDR, (uint8_t)(address >> 8));
+    rp2c02_ext_cpu_write(ppu, RP2C02_REG_ADDR, (uint8_t)address);
+}
+
 int main(void)
 {
     rp2c02_ext_t ppu;
@@ -16,6 +22,12 @@ int main(void)
     for (unsigned i = 0; i < 32; ++i) {
         assert(ppu.palette_ram[i] == 0u);
     }
+    assert(ppu.ctrl == 0u);
+    assert(ppu.mask == 0u);
+    assert(ppu.vram_address == 0u);
+    assert(ppu.ppuaddr_high_next);
+    assert(!rp2c02_ext_rendering_enabled(&ppu));
+    assert(!rp2c02_ext_palette_override_active(&ppu));
 
     /* Palette RAM stores only the six physical color-code bits. */
     rp2c02_ext_write_palette(&ppu, 0, 0x8fu);
@@ -43,6 +55,63 @@ int main(void)
     /* Preview lookup itself is six-bit just like the PPU color value. */
     assert(rgb_equal(rp2c02_demo_rgb(0x29u), rp2c02_demo_rgb(0x69u)));
 
-    puts("RP2C02 EXT palette OK: full six-bit color code preserved");
+    /* Physical palette mirrors: sprite entry-0 addresses mirror background
+       entry-0 addresses, while $04/$08/$0C remain independently addressable. */
+    rp2c02_ext_write_palette(&ppu, 4u, 0x21u);
+    rp2c02_ext_write_palette(&ppu, 0x14u, 0x16u);
+    assert(ppu.palette_ram[4] == 0x16u);
+    assert(rp2c02_ext_palette_index_for_address(0x3f10u) == 0u);
+    assert(rp2c02_ext_palette_index_for_address(0x3f14u) == 4u);
+    assert(rp2c02_ext_palette_index_for_address(0x3f18u) == 8u);
+    assert(rp2c02_ext_palette_index_for_address(0x3f1cu) == 12u);
+    assert(rp2c02_ext_palette_index_for_address(0x3f24u) == 4u);
+
+    /* Exercise the exact write-only register subset used by the project. */
+    set_ppu_address(&ppu, 0x3f05u);
+    rp2c02_ext_cpu_write(&ppu, RP2C02_REG_DATA, 0x2au);
+    assert(ppu.palette_ram[5] == 0x2au);
+    assert(ppu.vram_address == 0x3f06u);
+
+    set_ppu_address(&ppu, 0x3f10u);
+    rp2c02_ext_cpu_write(&ppu, RP2C02_REG_DATA, 0x31u);
+    assert(ppu.palette_ram[0] == 0x31u);
+
+    /* With rendering disabled and v outside palette RAM, EXT selects the
+       background palette entry directly. */
+    rp2c02_ext_write_palette(&ppu, 2u, 0x22u);
+    set_ppu_address(&ppu, 0x0000u);
+    assert(!rp2c02_ext_palette_override_active(&ppu));
+    assert(rp2c02_ext_rendering_disabled_code(&ppu, 2u) == 0x22u);
+
+    /* Leaving v in palette RAM overrides EXT, reproducing the real PPU trap
+       that the firmware avoids by restoring PPUADDR to $0000. */
+    set_ppu_address(&ppu, 0x3f05u);
+    assert(rp2c02_ext_palette_override_active(&ppu));
+    assert(rp2c02_ext_rendering_disabled_code(&ppu, 2u) == 0x2au);
+
+    set_ppu_address(&ppu, 0x0000u);
+    assert(!rp2c02_ext_palette_override_active(&ppu));
+    assert(rp2c02_ext_rendering_disabled_code(&ppu, 2u) == 0x22u);
+
+    /* EXT output/slave mode forces the internal EXT input to zero. The project
+       keeps this bit clear on hardware, but the reduced model makes that rule
+       explicit so an accidental configuration is detectable. */
+    rp2c02_ext_cpu_write(&ppu, RP2C02_REG_CTRL, RP2C02_CTRL_EXT_OUTPUT);
+    assert(rp2c02_ext_rendering_disabled_code(&ppu, 2u) == 0x31u);
+    rp2c02_ext_cpu_write(&ppu, RP2C02_REG_CTRL, 0u);
+
+    /* Greyscale is an index mask ($30), not a change to stored palette RAM. */
+    rp2c02_ext_cpu_write(&ppu, RP2C02_REG_MASK, RP2C02_MASK_GREYSCALE);
+    assert(rp2c02_ext_rendering_disabled_code(&ppu, 2u) == 0x20u);
+    assert(ppu.palette_ram[2] == 0x22u);
+    rp2c02_ext_cpu_write(&ppu, RP2C02_REG_MASK, 0u);
+
+    /* PPUCTRL bit 2 selects the documented +32 PPUDATA increment. */
+    rp2c02_ext_cpu_write(&ppu, RP2C02_REG_CTRL, RP2C02_CTRL_INCREMENT_32);
+    set_ppu_address(&ppu, 0x3f01u);
+    rp2c02_ext_cpu_write(&ppu, RP2C02_REG_DATA, 0x12u);
+    assert(ppu.vram_address == 0x3f21u);
+
+    puts("RP2C02 EXT model OK: six-bit colors, mirrors, host writes, and backdrop override");
     return 0;
 }
