@@ -1,0 +1,83 @@
+name: Hybrid emulator CI
+
+on:
+  push:
+    paths:
+      - 'emulator/**'
+      - '.github/workflows/emulator-ci.yml'
+  pull_request:
+    paths:
+      - 'emulator/**'
+      - '.github/workflows/emulator-ci.yml'
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure dependency-free emulator
+        run: cmake -S emulator -B build/emulator -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build/emulator --parallel
+
+      - name: Run regression tests
+        run: ctest --test-dir build/emulator --output-on-failure
+
+      - name: Exercise synchronized clock path
+        run: |
+          ./build/emulator/gbcrt_emu \
+            --clock sync \
+            --frames 1000 \
+            --out build/emulator/comparison-sync.ppm
+
+      - name: Exercise stock clock drift path
+        run: |
+          ./build/emulator/gbcrt_emu \
+            --clock stock \
+            --frames 1000 \
+            --out build/emulator/comparison-stock.ppm
+
+  sdl-viewer-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install SDL2 development files
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libsdl2-dev pkg-config
+
+      - name: Configure SDL2 viewer
+        run: |
+          cmake -S emulator -B build/emulator-sdl \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGBCRT_ENABLE_SDL2=ON
+
+      - name: Build SDL2 viewer
+        run: cmake --build build/emulator-sdl --parallel
+
+      - name: Run core tests in SDL build
+        run: ctest --test-dir build/emulator-sdl --output-on-failure
+
+  sameboy-link-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build pinned SameBoy library
+        run: ./emulator/scripts/bootstrap_sameboy.sh
+
+      - name: Configure SameBoy-backed emulator
+        run: |
+          cmake -S emulator -B build/emulator-sameboy \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DGBCRT_ENABLE_SAMEBOY=ON \
+            -DSAMEBOY_ROOT="$GITHUB_WORKSPACE/emulator/third_party/SameBoy"
+
+      - name: Build SameBoy-backed emulator
+        run: cmake --build build/emulator-sameboy --parallel
+
+      - name: Run core tests in SameBoy build
+        run: ctest --test-dir build/emulator-sameboy --output-on-failure
