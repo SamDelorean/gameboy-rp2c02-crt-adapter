@@ -3,6 +3,7 @@
 #include "ui_font.h"
 
 #include <stddef.h>
+#include <stdio.h>
 
 static void fill(rgb8_t *canvas, rgb8_t c)
 {
@@ -82,20 +83,26 @@ static void draw_menu(rgb8_t *canvas, const comparison_view_state_t *state)
 
     if (!state || !state->menu_open) return;
 
-    rect(canvas, 16, 48, 320, 118, (rgb8_t){22, 22, 26});
-    frame_rect(canvas, 16, 48, 320, 118, 2, (rgb8_t){200, 200, 210});
+    rect(canvas, 16, 48, 340, 118, (rgb8_t){22, 22, 26});
+    frame_rect(canvas, 16, 48, 340, 118, 2, (rgb8_t){200, 200, 210});
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
                       32, 60, 2, "CLOCK MODE", text);
 
     const int selected = state->menu_selection ? 1 : 0;
-    rect(canvas, 30, 88, 270, 28,
+    rect(canvas, 30, 88, 310, 28,
          selected == 0 ? active : (rgb8_t){45, 45, 50});
-    rect(canvas, 30, 124, 270, 28,
+    rect(canvas, 30, 124, 310, 28,
          selected == 1 ? active : (rgb8_t){45, 45, 50});
+
+    char stock_label[64];
+    snprintf(stock_label, sizeof(stock_label),
+             state->source_model == GBCRT_SOURCE_MODEL_SGB ?
+                 "STOCK SGB  4.295454 MHZ" :
+                 "STOCK DMG  4.194304 MHZ");
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                      42, 96, 1, "STOCK  4.194304 MHZ", accent);
+                      42, 96, 1, stock_label, accent);
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                      42, 132, 1, "SYNC   4.220355 MHZ", accent);
+                      42, 132, 1, "SYNC       4.220355 MHZ", accent);
 }
 
 static void draw_rp2c02_frame(rgb8_t *canvas,
