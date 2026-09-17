@@ -1,4 +1,5 @@
 #include "comparison_render.h"
+#include "rp2c02_timing.h"
 #include "ui_font.h"
 
 #include <stddef.h>
@@ -97,6 +98,38 @@ static void draw_menu(rgb8_t *canvas, const comparison_view_state_t *state)
                       42, 132, 1, "SYNC   4.220355 MHZ", accent);
 }
 
+static void draw_rp2c02_frame(rgb8_t *canvas,
+                              unsigned rx,
+                              unsigned ry,
+                              unsigned scale,
+                              const uint8_t ext[PPU_ACTIVE_H][PPU_ACTIVE_W],
+                              const rp2c02_ext_t *ppu)
+{
+    rp2c02_timing_t timing;
+    rp2c02_timing_reset(&timing);
+
+    /*
+     * Walk one complete 341x262 rendering-disabled RP2C02 frame. Only the
+     * 256x240 visible dots paint the comparison surface, but blanking and
+     * VBlank consume their real positions in the timing model.
+     */
+    for (unsigned i = 0; i < RP2C02_FRAME_DOTS; ++i) {
+        const unsigned x = timing.dot;
+        const unsigned y = timing.scanline;
+        const unsigned events = rp2c02_timing_step(&timing);
+
+        if (events & RP2C02_TIMING_VISIBLE_DOT) {
+            const uint8_t code = rp2c02_ext_palette_code(ppu, ext[y][x]);
+            rect(canvas,
+                 rx + x * scale,
+                 ry + y * scale,
+                 scale,
+                 scale,
+                 rp2c02_demo_rgb(code));
+        }
+    }
+}
+
 void comparison_render(rgb8_t *canvas,
                        const gb_source_frame_t *frame,
                        const uint8_t ext[PPU_ACTIVE_H][PPU_ACTIVE_W],
@@ -145,23 +178,13 @@ void comparison_render(rgb8_t *canvas,
         }
     }
 
-    /* Right adapter region: 256x240 at exact 2x integer scale = 512x480. */
+    /* Right adapter region: visible 256x240 portion of a 341x262 PPU frame. */
     const unsigned rx = 699;
     const unsigned ry = 132;
     const unsigned rscale = 2;
     rect(canvas, rx - 6, ry - 6, 524, 492, (rgb8_t){8, 8, 8});
     frame_rect(canvas, rx - 6, ry - 6, 524, 492, 2, video_edge);
-    for (unsigned y = 0; y < PPU_ACTIVE_H; ++y) {
-        for (unsigned x = 0; x < PPU_ACTIVE_W; ++x) {
-            const uint8_t code = rp2c02_ext_palette_code(ppu, ext[y][x]);
-            rect(canvas,
-                 rx + x * rscale,
-                 ry + y * rscale,
-                 rscale,
-                 rscale,
-                 rp2c02_demo_rgb(code));
-        }
-    }
+    draw_rp2c02_frame(canvas, rx, ry, rscale, ext, ppu);
 
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
                       79, 612, 1, "SOURCE REGION 160X144", text);
