@@ -2,6 +2,7 @@
 
 #ifdef GBCRT_ENABLE_SAMEBOY
 
+#include "sgb_lite.h"
 #include "Core/gb.h"
 
 #include <limits.h>
@@ -16,6 +17,7 @@ typedef struct {
     unsigned icd_pixels;
     unsigned icd_hresets;
     unsigned icd_vresets;
+    sgb_lite_decoder_t sgb_lite;
     gbcrt_source_model_t model;
     uint64_t frame_number;
 } sameboy_ctx_t;
@@ -97,6 +99,13 @@ static void sameboy_icd_vreset(GB_gameboy_t *gb)
     if (ctx) ctx->icd_vresets++;
 }
 
+/* Passive listener only: never drives JOYP/P14/P15 back into SameBoy. */
+static void sameboy_joyp_write(GB_gameboy_t *gb, uint8_t value)
+{
+    sameboy_ctx_t *ctx = sameboy_ctx_from_gb(gb);
+    if (ctx) (void)sgb_lite_feed_joyp(&ctx->sgb_lite, value);
+}
+
 static void sameboy_reset_icd_capture(sameboy_ctx_t *ctx)
 {
     ctx->icd_pixels = 0;
@@ -133,6 +142,17 @@ static int sameboy_run_complete_icd_frame(sameboy_ctx_t *ctx)
     return -1;
 }
 
+static void copy_sgb_metadata(const sameboy_ctx_t *ctx, gb_source_frame_t *frame)
+{
+    frame->sgb_palette_valid =
+        ctx->model == GBCRT_SOURCE_MODEL_SGB && ctx->sgb_lite.palette_valid;
+    frame->sgb_palette_command = ctx->sgb_lite.last_command_id;
+    frame->sgb_palette_sequence = ctx->sgb_lite.palette_sequence;
+    for (unsigned i = 0; i < 4; ++i) {
+        frame->sgb_palette_rgb555[i] = ctx->sgb_lite.palette_rgb555[i];
+    }
+}
+
 static int sameboy_next_frame(gb_source_t *source, gb_source_frame_t *frame)
 {
     sameboy_ctx_t *ctx = source->ctx;
@@ -162,6 +182,7 @@ static int sameboy_next_frame(gb_source_t *source, gb_source_frame_t *frame)
     }
 
     frame->frame_number = ctx->frame_number++;
+    copy_sgb_metadata(ctx, frame);
     return 0;
 }
 
@@ -224,6 +245,8 @@ int gb_source_sameboy_create_model(gb_source_t *source,
     if (!ctx) return -1;
 
     ctx->model = model;
+    sgb_lite_reset(&ctx->sgb_lite);
+
     const GB_model_t sameboy_model =
         model == GBCRT_SOURCE_MODEL_SGB ? GB_MODEL_SGB_NTSC_NO_SFC : GB_MODEL_DMG_B;
 
@@ -244,6 +267,7 @@ int gb_source_sameboy_create_model(gb_source_t *source,
         GB_set_icd_pixel_callback(ctx->gb, sameboy_icd_pixel);
         GB_set_icd_hreset_callback(ctx->gb, sameboy_icd_hreset);
         GB_set_icd_vreset_callback(ctx->gb, sameboy_icd_vreset);
+        GB_set_joyp_write_callback(ctx->gb, sameboy_joyp_write);
     }
 
     if (GB_load_rom(ctx->gb, rom_path) != 0 ||
