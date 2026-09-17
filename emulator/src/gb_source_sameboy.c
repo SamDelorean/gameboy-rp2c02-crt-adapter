@@ -5,6 +5,7 @@
 #include "Core/gb.h"
 
 #include <limits.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -96,22 +97,49 @@ static void sameboy_icd_vreset(GB_gameboy_t *gb)
     if (ctx) ctx->icd_vresets++;
 }
 
+static void sameboy_reset_icd_capture(sameboy_ctx_t *ctx)
+{
+    ctx->icd_pixels = 0;
+    ctx->icd_hresets = 0;
+    ctx->icd_vresets = 0;
+    memset(ctx->icd_shade, 0, sizeof(ctx->icd_shade));
+}
+
+static int sameboy_run_complete_icd_frame(sameboy_ctx_t *ctx)
+{
+    /*
+     * The first GB_run_frame() after reset can legitimately represent startup
+     * time with the LCD disabled and therefore contain no complete active ICD
+     * image. Synchronize to the first full 160x144 callback frame instead of
+     * treating startup blanking as a source error. Subsequent calls normally
+     * succeed on the first attempt.
+     */
+    enum { MAX_SYNC_FRAMES = 8 };
+
+    for (unsigned attempt = 0; attempt < MAX_SYNC_FRAMES; ++attempt) {
+        sameboy_reset_icd_capture(ctx);
+        (void)GB_run_frame(ctx->gb);
+
+        if (ctx->icd_pixels >= GB_W * GB_H) {
+            return 0;
+        }
+    }
+
+    fprintf(stderr,
+            "SameBoy SGB ICD did not produce a complete frame: pixels=%u hreset=%u vreset=%u\n",
+            ctx->icd_pixels,
+            ctx->icd_hresets,
+            ctx->icd_vresets);
+    return -1;
+}
+
 static int sameboy_next_frame(gb_source_t *source, gb_source_frame_t *frame)
 {
     sameboy_ctx_t *ctx = source->ctx;
     if (!ctx || !ctx->gb) return -1;
 
     if (ctx->model == GBCRT_SOURCE_MODEL_SGB) {
-        ctx->icd_pixels = 0;
-        ctx->icd_hresets = 0;
-        ctx->icd_vresets = 0;
-        memset(ctx->icd_shade, 0, sizeof(ctx->icd_shade));
-    }
-
-    (void)GB_run_frame(ctx->gb);
-
-    if (ctx->model == GBCRT_SOURCE_MODEL_SGB) {
-        if (ctx->icd_pixels < GB_W * GB_H) return -1;
+        if (sameboy_run_complete_icd_frame(ctx) != 0) return -1;
 
         for (unsigned y = 0; y < GB_H; ++y) {
             for (unsigned x = 0; x < GB_W; ++x) {
@@ -122,6 +150,8 @@ static int sameboy_next_frame(gb_source_t *source, gb_source_frame_t *frame)
         }
     }
     else {
+        (void)GB_run_frame(ctx->gb);
+
         for (unsigned y = 0; y < GB_H; ++y) {
             for (unsigned x = 0; x < GB_W; ++x) {
                 const uint32_t rgba = ctx->screen[(size_t)y * GB_W + x];
