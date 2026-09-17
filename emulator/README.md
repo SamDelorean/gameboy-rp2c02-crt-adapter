@@ -7,7 +7,7 @@ It intentionally does **not** emulate a complete NES. The target architecture is
 ```text
 Game Boy source core
       |
-      | 2-bit LCD pixel stream / 160x144 frame
+      | normal reference frame + 2-bit four-shade frame
       v
 virtual adapter bridge
       |
@@ -20,54 +20,110 @@ reduced RP2C02 EXT model
 comparison frontend
 ```
 
-The long-term frontend will show two synchronized views side by side on a 16:9 canvas:
+The comparison output is designed around a 16:9 canvas:
 
 - left: normal Game Boy/SameBoy reference output;
 - right: the same frame after the project's bridge and RP2C02 EXT/palette path.
 
 This makes geometry, centering, duplication patterns and palette differences directly visible.
 
-## Current V0.1
+## Current V0.2
 
-The first checked-in version is deliberately dependency-light. It contains:
+V0.2 keeps the dependency-free V0.1 path and adds a pluggable Game Boy source interface plus an optional SameBoy-backed ROM source.
 
-- the canonical horizontal 160 -> 234 center-sampled mapping;
-- the exact vertical 144 -> 240 2,1,2 repetition pattern;
-- the 11 + 234 + 11 output composition;
-- a reduced logical EXT -> palette-RAM RP2C02 model;
-- a deterministic 160x144 two-bit test-pattern source;
-- a 1280x720 side-by-side comparison renderer that writes a PPM image;
-- an automated geometry test.
+Implemented now:
+
+- canonical horizontal `160 -> 234` center-sampled mapping;
+- exact vertical `144 -> 240` `2,1,2` repetition pattern;
+- `11 + 234 + 11` output composition;
+- reduced logical `EXT -> palette RAM` RP2C02 model;
+- deterministic 160x144 two-bit test-pattern source;
+- generic `gb_source` interface;
+- optional SameBoy source using the normal SameBoy framebuffer as the left reference;
+- recovery of the four final DMG shade indices from that same SameBoy frame for the right-hand bridge path;
+- 1280x720 side-by-side comparison renderer that writes a PPM image;
+- automated bridge-geometry regression test.
 
 The RGB LUT in `rp2c02_ext.c` is **only a provisional monitor approximation**. It is not yet a composite NTSC waveform model.
 
-## Build
+## Dependency-free build
+
+From the repository root:
 
 ```sh
 cmake -S emulator -B build/emulator
 cmake --build build/emulator
 ctest --test-dir build/emulator --output-on-failure
-./build/emulator/gbcrt_emu build/emulator/comparison.ppm
+./build/emulator/gbcrt_emu --out build/emulator/comparison.ppm
 ```
 
-The generated `comparison.ppm` is a static preview of the planned comparison UI.
+This uses the built-in two-bit pattern source and does not require SameBoy.
 
-## SameBoy integration plan
+## SameBoy-backed ROM build
 
-SameBoy is the preferred first Game Boy source because its core is highly documented and exposes integration callbacks used for SFC/SNES/SGB-style embedding, including pixel and horizontal/vertical reset callbacks.
-
-The integration boundary will remain narrow:
+SameBoy is deliberately kept outside this repository. A helper script pins the first integration to commit:
 
 ```text
-SameBoy core
-  -> 2-bit pixel events / frame reference
-  -> gb_source adapter
-  -> bridge
+213a12ce93d66b105a113debd9396306066a7cfc
 ```
 
-We do not need to fork a complete frontend. The normal SameBoy frame will be retained as the left-hand reference while the raw 2-bit path feeds the virtual adapter on the right.
+Bootstrap and build it with:
 
-No ROM images are stored in this repository.
+```sh
+./emulator/scripts/bootstrap_sameboy.sh
+```
+
+Then configure this emulator with the resulting checkout:
+
+```sh
+cmake -S emulator -B build/emulator-sameboy \
+  -DGBCRT_ENABLE_SAMEBOY=ON \
+  -DSAMEBOY_ROOT="$PWD/emulator/third_party/SameBoy"
+
+cmake --build build/emulator-sameboy
+```
+
+Run a user-supplied ROM and DMG boot ROM:
+
+```sh
+./build/emulator-sameboy/gbcrt_emu \
+  --rom /path/to/game.gb \
+  --boot /path/to/dmg_boot.bin \
+  --frames 120 \
+  --out build/emulator-sameboy/comparison.ppm
+```
+
+No commercial ROM or Nintendo boot ROM is stored in this repository.
+
+SameBoy itself contains open boot-ROM source, so a later integration may switch to a reproducibly built SameBoy boot ROM instead of requiring a user-supplied Nintendo image. That is intentionally kept separate from the first source-adapter step.
+
+## Why the first SameBoy adapter works at frame level
+
+For the first ROM-backed comparison we intentionally do not patch SameBoy's pixel pipeline.
+
+SameBoy renders the normal 160x144 DMG frame using a fixed DMG palette. The adapter preserves that framebuffer for the **left reference image**, then maps those four known RGB values back to shade indices `0..3` for the project's **right-hand bridge path**.
+
+This provides one Game Boy execution core and one frame source for both views:
+
+```text
+             SameBoy DMG core
+                    |
+             rendered 160x144
+               /           \
+              /             \
+     normal reference    four-shade recovery
+          left                 |
+                               v
+                         project bridge
+                               |
+                               v
+                         RP2C02 EXT model
+                              right
+```
+
+This is sufficient for validating geometry, palette mapping and frame-level behavior.
+
+A later signal-level mode may use or extend SameBoy's SFC/SNES integration callbacks to expose pixel/H-reset/V-reset events directly when we want to compare the theoretical `LD0/LD1/CP/CPL/ST/S` capture model against emulator timing.
 
 ## RP2C02 model policy
 
