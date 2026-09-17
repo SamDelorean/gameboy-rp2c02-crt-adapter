@@ -53,6 +53,7 @@ if(GBCRT_ENABLE_SAMEBOY)
 
     target_sources(gbcrt_core PRIVATE src/gb_source_sameboy.c)
     target_compile_definitions(gbcrt_core PRIVATE
+        GB_INTERNAL=1
         GB_DISABLE_REWIND=1
         GB_DISABLE_DEBUGGER=1
         GB_DISABLE_CHEATS=1
@@ -88,6 +89,9 @@ if(BUILD_TESTING)
     target_link_libraries(test_source PRIVATE gbcrt_core)
     add_test(NAME source_abstraction COMMAND test_source)
 
+    # Signal-level SGB packet decoder is retained only as a future hardware /
+    # firmware validation asset. The main virtual-bench path consumes SameBoy's
+    # already-decoded SGB state directly.
     add_executable(test_sgb_lite tests/test_sgb_lite.c)
     target_link_libraries(test_sgb_lite PRIVATE gbcrt_core)
     add_test(NAME sgb_lite_packet_decoder COMMAND test_sgb_lite)
