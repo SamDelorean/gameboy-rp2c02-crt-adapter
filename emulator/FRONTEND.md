@@ -1,54 +1,64 @@
 # Frontend policy for the hybrid emulator
 
-The hybrid emulator is a temporary engineering bench, not a new general-purpose Game Boy emulator frontend.
+The preferred user-facing emulator is **SameBoy with an added RP2C02 alternate-video mode**.
 
-## Reuse SameBoy where practical
+The separate program under `emulator/` remains a useful engineering/regression bench, but it is not intended to replace SameBoy's mature application frontend.
 
-SameBoy already provides a mature SDL frontend with:
+## SameBoy stays intact
+
+Preserve SameBoy's existing SDL application and ordinary features wherever practical:
+
+- ROM/open-file flow;
+- Game Boy execution and rendering;
+- audio;
+- joypad/controller support;
+- pause/reset/turbo/rewind;
+- save states and screenshots;
+- menu/settings behavior;
+- OSD and text rendering;
+- persistent configuration.
+
+SameBoy already provides the relevant frontend building blocks:
 
 - `SDL/gui.c` / `run_gui()` for menu and OSD behavior;
 - `SDL/font.c` for text rendering;
 - `SDL/configuration.*` for persistent frontend configuration;
 - platform-specific `SDL/open_dialog/*` helpers for ROM file selection;
-- established keyboard/controller handling in `SDL/main.c`.
+- keyboard/controller handling in `SDL/main.c`.
 
-Those components are the preferred reference and reuse source when the hybrid bench needs equivalent frontend behavior. Do not independently design a large settings/menu system unless the existing SameBoy frontend cannot be adapted reasonably.
+The project should **extend those facilities**, not recreate them in another application.
 
-The full SameBoy `SDL/gui.c` is intentionally **not** copied wholesale into this repository. It is tightly coupled to SameBoy features that the hybrid bench does not need, including save states, shaders, debugger functions, recording and many emulator settings. Pulling that complete layer into the project would create more maintenance work than it removes.
+## What the project adds
 
-Preferred strategy:
+Only the behavior specific to this experiment needs to be added to SameBoy:
 
-1. keep SameBoy itself responsible for Game Boy execution and ordinary input;
-2. reuse or closely adapt small SameBoy SDL frontend pieces when they solve an actual requirement;
-3. keep project-specific UI limited to the side-by-side comparison surface and a few alternate-output controls.
+1. a second RP2C02 video pipeline;
+2. an optional side-by-side comparison presentation;
+3. one logical `NEXT PALETTE` action;
+4. minimal status information useful for comparison.
 
-## Project-specific comparison UI
-
-The hybrid bench adds only the UI needed for this project:
+Conceptual presentation:
 
 ```text
 +-------------------------------------------------------------+
-| clock/status                   [ NEXT PALETTE ]              |
+| SameBoy menu / OSD                 [ NEXT PALETTE ]          |
 +----------------------------+--------------------------------+
-| GAME BOY REFERENCE         | RP2C02 EXT PATH                |
+| GAME BOY REFERENCE         | RP2C02 OUTPUT                  |
 |                            |                                |
-| SameBoy output             | black-box adapted output       |
+| existing SameBoy output    | black-box adapted output       |
 |                            |                                |
 +----------------------------+--------------------------------+
 ```
 
-The two video wells remain visibly framed so aspect ratio, scaling, borders and color mapping can be compared directly.
+The two video wells remain explicitly framed so aspect ratio, scaling, borders and color mapping can be compared directly.
+
+Normal SameBoy display mode should remain available and behave as upstream does.
 
 ## One-button palette control
 
-The virtual control intentionally mirrors the planned physical one-button UI without simulating its electronics or firmware.
+The virtual control mirrors only the *logical effect* of the planned physical one-button UI.
 
-Both of these perform the exact same logical operation:
-
-- press `P`;
-- click the on-screen `NEXT PALETTE [P]` button.
-
-Each activation advances:
+A SameBoy menu item/hotkey and, in comparison mode, an optional small clickable button perform the same action:
 
 ```text
 AUTO/SGB
@@ -59,17 +69,19 @@ AUTO/SGB
   -> AUTO/SGB
 ```
 
-No debounce, GPIO, RP2350/Arduino state machine, PIO, DMA or other physical implementation detail is represented in the emulator.
+The standalone SDL comparison bench currently uses `P` and a clickable `NEXT PALETTE [P]` control. The SameBoy extension should expose an equivalent action through its existing input/menu conventions.
+
+No debounce, GPIO, RP2350/Arduino state machine, PIO, DMA or other physical implementation detail belongs in the desktop emulator.
 
 ## Black-box adapter boundary
 
-The main virtual path is deliberately abstract:
+The virtual alternate path is deliberately abstract:
 
 ```text
 SameBoy
   |
-  | 160x144, 2-bit Game Boy image
-  | optional already-decoded SGB palette
+  | 160x144, four-shade Game Boy image
+  | optional SGB palette already interpreted by SameBoy
   v
 project black-box adapter
   |
@@ -79,18 +91,29 @@ project black-box adapter
 RP2C02 EXT model
 ```
 
-The black box represents only the behavior needed to study the alternate video output. It must not become an emulator of the planned RP2350/Arduino implementation.
+The black box represents only the behavior required to study the alternate video output. It must not become an emulator of the planned RP2350/Arduino implementation.
 
-For SGB, SameBoy is allowed to decode its own SGB protocol and provide effective palette state directly. The project then maps those RGB555 colors to RP2C02 palette codes. The standalone `sgb_lite` packet decoder remains only as a future hardware/firmware validation asset for the documented P14/P15 implementation; it is not the primary emulator path.
+For SGB, reuse SameBoy's existing SGB implementation and consume effective palette state directly. The standalone `sgb_lite` packet decoder is retained only as a future hardware/firmware validation asset for the documented physical P14/P15 implementation.
 
-## Future frontend reuse
+## Existing standalone frontend
 
-When needed, prefer adapting SameBoy's existing frontend facilities for:
+The current custom SDL viewer is retained because it is useful for:
 
-- ROM-open dialog;
-- pause/menu conventions;
-- controller configuration;
-- OSD messages;
-- persistent settings.
+- CI and regression testing;
+- bridge/scaler development;
+- RP2C02-model debugging;
+- generated smoke-ROM tests;
+- fast experiments independent of the full SameBoy application.
 
-The comparison layout itself remains project-owned because SameBoy does not provide the required dual-video presentation.
+Do not continue expanding it into a second general-purpose emulator frontend.
+
+## Integration discipline
+
+Prefer a small patch surface against pinned/upstream SameBoy:
+
+- add project-owned alternate-video modules;
+- call them from existing SameBoy rendering boundaries;
+- add a small number of UI/menu hooks;
+- keep upstream SameBoy code otherwise recognizable and maintainable.
+
+See `SAMEBOY_EXTENSION.md` for the insertion-point design.
