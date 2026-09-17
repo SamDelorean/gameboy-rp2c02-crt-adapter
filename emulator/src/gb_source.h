@@ -15,11 +15,24 @@ typedef struct {
     uint64_t frame_number;
 } gb_source_frame_t;
 
+typedef enum {
+    GB_SOURCE_KEY_RIGHT = 0,
+    GB_SOURCE_KEY_LEFT,
+    GB_SOURCE_KEY_UP,
+    GB_SOURCE_KEY_DOWN,
+    GB_SOURCE_KEY_A,
+    GB_SOURCE_KEY_B,
+    GB_SOURCE_KEY_SELECT,
+    GB_SOURCE_KEY_START,
+    GB_SOURCE_KEY_COUNT
+} gb_source_key_t;
+
 typedef struct gb_source gb_source_t;
 
 typedef struct {
     const char *name;
     int (*next_frame)(gb_source_t *source, gb_source_frame_t *frame);
+    int (*set_key)(gb_source_t *source, gb_source_key_t key, int pressed);
     void (*destroy)(gb_source_t *source);
 } gb_source_ops_t;
 
@@ -29,9 +42,11 @@ struct gb_source {
 };
 
 int gb_source_next_frame(gb_source_t *source, gb_source_frame_t *frame);
+/* Returns 0 for accepted/no-op input, -1 for invalid source/key. */
+int gb_source_set_key(gb_source_t *source, gb_source_key_t key, int pressed);
 void gb_source_destroy(gb_source_t *source);
 
-/* Dependency-free source used by V0.1 and regression tests. */
+/* Dependency-free source used by regression tests and offline previews. */
 int gb_source_pattern_create(gb_source_t *source);
 
 #ifdef GBCRT_ENABLE_SAMEBOY
