@@ -74,6 +74,30 @@ static void apply_clock_mode(gbcrt_clock_scheduler_t *scheduler,
     view->menu_selection = (int)mode;
 }
 
+static int game_key_from_sdl(SDL_Keycode key, gb_source_key_t *out)
+{
+    if (!out) return 0;
+
+    switch (key) {
+    case SDLK_RIGHT:     *out = GB_SOURCE_KEY_RIGHT;  return 1;
+    case SDLK_LEFT:      *out = GB_SOURCE_KEY_LEFT;   return 1;
+    case SDLK_UP:        *out = GB_SOURCE_KEY_UP;     return 1;
+    case SDLK_DOWN:      *out = GB_SOURCE_KEY_DOWN;   return 1;
+    case SDLK_z:         *out = GB_SOURCE_KEY_A;      return 1;
+    case SDLK_x:         *out = GB_SOURCE_KEY_B;      return 1;
+    case SDLK_BACKSPACE: *out = GB_SOURCE_KEY_SELECT; return 1;
+    case SDLK_RETURN:    *out = GB_SOURCE_KEY_START;  return 1;
+    default: return 0;
+    }
+}
+
+static void release_all_game_keys(gb_source_t *source)
+{
+    for (int key = 0; key < GB_SOURCE_KEY_COUNT; ++key) {
+        (void)gb_source_set_key(source, (gb_source_key_t)key, 0);
+    }
+}
+
 int main(int argc, char **argv)
 {
     const char *rom = NULL;
@@ -186,8 +210,14 @@ int main(int argc, char **argv)
             if (event.type == SDL_QUIT) {
                 running = 0;
             }
+            else if (event.type == SDL_WINDOWEVENT &&
+                     event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
+                release_all_game_keys(&source);
+            }
             else if (event.type == SDL_KEYDOWN) {
                 const SDL_Keycode key = event.key.keysym.sym;
+
+                if (event.key.repeat) continue;
 
                 if (key == SDLK_q) {
                     running = 0;
@@ -202,6 +232,7 @@ int main(int argc, char **argv)
                 else if (key == SDLK_m) {
                     view.menu_open = !view.menu_open;
                     view.menu_selection = (int)view.clock_mode;
+                    if (view.menu_open) release_all_game_keys(&source);
                 }
                 else if (key == SDLK_c) {
                     const gbcrt_clock_mode_t next =
@@ -223,6 +254,18 @@ int main(int argc, char **argv)
                                      view.menu_selection ?
                                      GBCRT_CLOCK_SYNC : GBCRT_CLOCK_STOCK);
                     view.menu_open = 0;
+                }
+                else if (!view.menu_open) {
+                    gb_source_key_t game_key;
+                    if (game_key_from_sdl(key, &game_key)) {
+                        (void)gb_source_set_key(&source, game_key, 1);
+                    }
+                }
+            }
+            else if (event.type == SDL_KEYUP) {
+                gb_source_key_t game_key;
+                if (game_key_from_sdl(event.key.keysym.sym, &game_key)) {
+                    (void)gb_source_set_key(&source, game_key, 0);
                 }
             }
         }
@@ -258,6 +301,8 @@ int main(int argc, char **argv)
         SDL_RenderCopy(renderer, texture, NULL, NULL);
         SDL_RenderPresent(renderer);
     }
+
+    release_all_game_keys(&source);
 
     printf("viewer stopped: mode=%s output=%llu source=%llu repeats=%llu\n",
            gbcrt_clock_mode_name(view.clock_mode),
