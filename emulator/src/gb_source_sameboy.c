@@ -2,8 +2,8 @@
 
 #ifdef GBCRT_ENABLE_SAMEBOY
 
-#include "sgb_lite.h"
 #include "Core/gb.h"
+#include "Core/sgb.h"
 
 #include <limits.h>
 #include <stdio.h>
@@ -13,12 +13,10 @@
 typedef struct {
     GB_gameboy_t *gb;
     uint32_t screen[GB_W * GB_H];
-    uint8_t icd_shade[GB_H][GB_W];
-    unsigned icd_pixels;
-    unsigned icd_hresets;
-    unsigned icd_vresets;
-    sgb_lite_decoder_t sgb_lite;
     gbcrt_source_model_t model;
+    uint16_t last_sgb_palette[4];
+    bool last_sgb_palette_valid;
+    uint64_t sgb_palette_sequence;
     uint64_t frame_number;
 } sameboy_ctx_t;
 
@@ -30,15 +28,6 @@ static uint32_t encode_rgb(GB_gameboy_t *gb, uint8_t r, uint8_t g, uint8_t b)
            ((uint32_t)g << 8) |
            ((uint32_t)b << 16) |
            0xff000000u;
-}
-
-static uint32_t dmg_reference_rgba(uint8_t shade)
-{
-    const unsigned palette_index = 3u - (shade & 3u);
-    return encode_rgb(NULL,
-                      GB_PALETTE_DMG.colors[palette_index].r,
-                      GB_PALETTE_DMG.colors[palette_index].g,
-                      GB_PALETTE_DMG.colors[palette_index].b);
 }
 
 static uint8_t shade_from_rgba(uint32_t rgba)
@@ -66,91 +55,28 @@ static uint8_t shade_from_rgba(uint32_t rgba)
     return (uint8_t)best_shade;
 }
 
-static sameboy_ctx_t *sameboy_ctx_from_gb(GB_gameboy_t *gb)
+static int update_sgb_palette_metadata(sameboy_ctx_t *ctx,
+                                       gb_source_frame_t *frame)
 {
-    return (sameboy_ctx_t *)GB_get_user_data(gb);
-}
+    if (!ctx || !ctx->gb || !ctx->gb->sgb) return -1;
 
-/*
- * SameBoy's *_NO_SFC SGB model exposes the exact final 2-bit pixel stream
- * intended for a SNES/SFC-side ICD consumer. This is the closest software
- * analogue of the digital source our hardware adapter needs.
- */
-static void sameboy_icd_pixel(GB_gameboy_t *gb, uint8_t pixel)
-{
-    sameboy_ctx_t *ctx = sameboy_ctx_from_gb(gb);
-    if (!ctx) return;
-
-    const unsigned n = ctx->icd_pixels++;
-    if (n < GB_W * GB_H) {
-        ctx->icd_shade[n / GB_W][n % GB_W] = pixel & 3u;
-    }
-}
-
-static void sameboy_icd_hreset(GB_gameboy_t *gb)
-{
-    sameboy_ctx_t *ctx = sameboy_ctx_from_gb(gb);
-    if (ctx) ctx->icd_hresets++;
-}
-
-static void sameboy_icd_vreset(GB_gameboy_t *gb)
-{
-    sameboy_ctx_t *ctx = sameboy_ctx_from_gb(gb);
-    if (ctx) ctx->icd_vresets++;
-}
-
-/* Passive listener only: never drives JOYP/P14/P15 back into SameBoy. */
-static void sameboy_joyp_write(GB_gameboy_t *gb, uint8_t value)
-{
-    sameboy_ctx_t *ctx = sameboy_ctx_from_gb(gb);
-    if (ctx) (void)sgb_lite_feed_joyp(&ctx->sgb_lite, value);
-}
-
-static void sameboy_reset_icd_capture(sameboy_ctx_t *ctx)
-{
-    ctx->icd_pixels = 0;
-    ctx->icd_hresets = 0;
-    ctx->icd_vresets = 0;
-    memset(ctx->icd_shade, 0, sizeof(ctx->icd_shade));
-}
-
-static int sameboy_run_complete_icd_frame(sameboy_ctx_t *ctx)
-{
-    /*
-     * The first GB_run_frame() after reset can legitimately represent startup
-     * time with the LCD disabled and therefore contain no complete active ICD
-     * image. Synchronize to the first full 160x144 callback frame instead of
-     * treating startup blanking as a source error. Subsequent calls normally
-     * succeed on the first attempt.
-     */
-    enum { MAX_SYNC_FRAMES = 8 };
-
-    for (unsigned attempt = 0; attempt < MAX_SYNC_FRAMES; ++attempt) {
-        sameboy_reset_icd_capture(ctx);
-        (void)GB_run_frame(ctx->gb);
-
-        if (ctx->icd_pixels >= GB_W * GB_H) {
-            return 0;
-        }
-    }
-
-    fprintf(stderr,
-            "SameBoy SGB ICD did not produce a complete frame: pixels=%u hreset=%u vreset=%u\n",
-            ctx->icd_pixels,
-            ctx->icd_hresets,
-            ctx->icd_vresets);
-    return -1;
-}
-
-static void copy_sgb_metadata(const sameboy_ctx_t *ctx, gb_source_frame_t *frame)
-{
-    frame->sgb_palette_valid =
-        ctx->model == GBCRT_SOURCE_MODEL_SGB && ctx->sgb_lite.palette_valid;
-    frame->sgb_palette_command = ctx->sgb_lite.last_command_id;
-    frame->sgb_palette_sequence = ctx->sgb_lite.palette_sequence;
+    uint16_t current[4];
     for (unsigned i = 0; i < 4; ++i) {
-        frame->sgb_palette_rgb555[i] = ctx->sgb_lite.palette_rgb555[i];
+        current[i] = ctx->gb->sgb->effective_palettes[i] & 0x7fffu;
     }
+
+    if (!ctx->last_sgb_palette_valid ||
+        memcmp(current, ctx->last_sgb_palette, sizeof(current)) != 0) {
+        memcpy(ctx->last_sgb_palette, current, sizeof(current));
+        ctx->last_sgb_palette_valid = true;
+        ctx->sgb_palette_sequence++;
+    }
+
+    frame->sgb_palette_valid = true;
+    memcpy(frame->sgb_palette_rgb555, current, sizeof(current));
+    frame->sgb_palette_command = 0xffu; /* HLE result; command transport is abstracted. */
+    frame->sgb_palette_sequence = ctx->sgb_palette_sequence;
+    return 0;
 }
 
 static int sameboy_next_frame(gb_source_t *source, gb_source_frame_t *frame)
@@ -158,19 +84,35 @@ static int sameboy_next_frame(gb_source_t *source, gb_source_frame_t *frame)
     sameboy_ctx_t *ctx = source->ctx;
     if (!ctx || !ctx->gb) return -1;
 
-    if (ctx->model == GBCRT_SOURCE_MODEL_SGB) {
-        if (sameboy_run_complete_icd_frame(ctx) != 0) return -1;
+    (void)GB_run_frame(ctx->gb);
 
+    if (ctx->model == GBCRT_SOURCE_MODEL_SGB) {
+        if (!ctx->gb->sgb) {
+            fprintf(stderr, "SameBoy SGB HLE state is unavailable\n");
+            return -1;
+        }
+
+        /*
+         * SameBoy already decoded the SGB protocol.  The virtual bench consumes
+         * its raw four-shade Game Boy screen buffer plus its effective SGB
+         * palette.  No JOYP/P14/P15 electrical transport, Arduino/RP2350, PIO,
+         * DMA or firmware behavior is emulated here.
+         */
         for (unsigned y = 0; y < GB_H; ++y) {
             for (unsigned x = 0; x < GB_W; ++x) {
-                const uint8_t shade = ctx->icd_shade[y][x] & 3u;
-                frame->shade[y][x] = shade;
-                frame->reference_rgba[y][x] = dmg_reference_rgba(shade);
+                const size_t i = (size_t)y * GB_W + x;
+                frame->shade[y][x] = ctx->gb->sgb->screen_buffer[i] & 3u;
+                frame->reference_rgba[y][x] = ctx->screen[i];
             }
         }
+
+        if (update_sgb_palette_metadata(ctx, frame) != 0) return -1;
     }
     else {
-        (void)GB_run_frame(ctx->gb);
+        frame->sgb_palette_valid = false;
+        frame->sgb_palette_command = 0xffu;
+        frame->sgb_palette_sequence = 0u;
+        memset(frame->sgb_palette_rgb555, 0, sizeof(frame->sgb_palette_rgb555));
 
         for (unsigned y = 0; y < GB_H; ++y) {
             for (unsigned x = 0; x < GB_W; ++x) {
@@ -182,7 +124,6 @@ static int sameboy_next_frame(gb_source_t *source, gb_source_frame_t *frame)
     }
 
     frame->frame_number = ctx->frame_number++;
-    copy_sgb_metadata(ctx, frame);
     return 0;
 }
 
@@ -227,7 +168,7 @@ static const gb_source_ops_t sameboy_dmg_ops = {
 };
 
 static const gb_source_ops_t sameboy_sgb_ops = {
-    .name = "SameBoy SGB ICD",
+    .name = "SameBoy SGB",
     .next_frame = sameboy_next_frame,
     .set_key = sameboy_set_key,
     .destroy = sameboy_destroy,
@@ -245,10 +186,14 @@ int gb_source_sameboy_create_model(gb_source_t *source,
     if (!ctx) return -1;
 
     ctx->model = model;
-    sgb_lite_reset(&ctx->sgb_lite);
 
+    /*
+     * SGB uses SameBoy's HLE SFC side deliberately.  SameBoy therefore owns
+     * command decoding and palette state; this project only adapts the already
+     * decoded image/palette to the RP2C02 path.
+     */
     const GB_model_t sameboy_model =
-        model == GBCRT_SOURCE_MODEL_SGB ? GB_MODEL_SGB_NTSC_NO_SFC : GB_MODEL_DMG_B;
+        model == GBCRT_SOURCE_MODEL_SGB ? GB_MODEL_SGB_NTSC : GB_MODEL_DMG_B;
 
     ctx->gb = GB_init(GB_alloc(), sameboy_model);
     if (!ctx->gb) {
@@ -256,19 +201,11 @@ int gb_source_sameboy_create_model(gb_source_t *source,
         return -1;
     }
 
-    GB_set_user_data(ctx->gb, ctx);
     GB_set_border_mode(ctx->gb, GB_BORDER_NEVER);
     GB_set_pixels_output(ctx->gb, ctx->screen);
     GB_set_rgb_encode_callback(ctx->gb, encode_rgb);
     GB_set_palette(ctx->gb, &GB_PALETTE_DMG);
     GB_set_emulate_joypad_bouncing(ctx->gb, false);
-
-    if (model == GBCRT_SOURCE_MODEL_SGB) {
-        GB_set_icd_pixel_callback(ctx->gb, sameboy_icd_pixel);
-        GB_set_icd_hreset_callback(ctx->gb, sameboy_icd_hreset);
-        GB_set_icd_vreset_callback(ctx->gb, sameboy_icd_vreset);
-        GB_set_joyp_write_callback(ctx->gb, sameboy_joyp_write);
-    }
 
     if (GB_load_rom(ctx->gb, rom_path) != 0 ||
         GB_load_boot_rom(ctx->gb, boot_rom_path) != 0) {
