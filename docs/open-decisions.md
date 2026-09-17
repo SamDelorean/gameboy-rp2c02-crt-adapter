@@ -90,7 +90,7 @@ Open validation points include:
 
 - which real games/configurations emit usable packets passively,
 - exact packet-decoder timing tolerances,
-- RGB555-to-RP2C02 quantization details,
+- final/measured RGB555-to-RP2C02 quantization basis (a provisional LUT nearest-color translator is now implemented),
 - fallback palette behavior.
 
 Active SGB identification emulation remains explicitly deferred unless later justified.

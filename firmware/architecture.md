@@ -236,6 +236,8 @@ P14/P15
 
 While a manual preset is active, valid SGB packets may be decoded/cached but cannot alter the visible palette.
 
+The first physical implementation is intentionally compile-time optional. With `GBCRT_ENABLE_SGB_LITE=0` (default), P14/P15 remain ordinary unused inputs and no interrupts are attached. With it enabled on a wired installation, GPIO-change interrupts only enqueue the two-bit P14/P15 line state; packet decoding, RGB555-to-RP2C02 quantization and palette caching run in foreground code. Only one-packet PAL01/PAL23/PAL03/PAL12 traffic is accepted. Queue overflow discards the partial packet and resynchronizes rather than risking a corrupt palette. Exact P14/P15 edge timing/IRQ margin remains subject to bench validation.
+
 ## 13. User input and pulls
 
 `PALETTE_BUTTON` is a human-rate input. On the RP2350 baseline it should use the MCU internal pull-up with the switch to GND unless later EMC/noise testing justifies an external resistor.

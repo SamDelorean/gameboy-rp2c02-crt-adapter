@@ -129,6 +129,10 @@ if(BUILD_TESTING)
     target_link_libraries(test_sgb_lite PRIVATE gbcrt_core)
     add_test(NAME sgb_lite_packet_decoder COMMAND test_sgb_lite)
 
+    add_executable(test_firmware_sgb_lite tests/test_firmware_sgb_lite.c)
+    target_link_libraries(test_firmware_sgb_lite PRIVATE gbcrt_core)
+    add_test(NAME firmware_sgb_lite_palette COMMAND test_firmware_sgb_lite)
+
     add_executable(test_rp2c02_ext tests/test_rp2c02_ext.c)
     target_link_libraries(test_rp2c02_ext PRIVATE gbcrt_core)
     add_test(NAME rp2c02_ext_palette COMMAND test_rp2c02_ext)
