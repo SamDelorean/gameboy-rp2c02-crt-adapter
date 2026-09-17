@@ -81,3 +81,19 @@ jobs:
 
       - name: Run core tests in SameBoy build
         run: ctest --test-dir build/emulator-sameboy --output-on-failure
+
+      - name: Generate project-authored smoke ROM
+        run: python3 emulator/tests/generate_smoke_rom.py build/emulator-smoke
+
+      - name: Execute smoke ROM through SameBoy and alternate video path
+        run: |
+          ./build/emulator-sameboy/gbcrt_emu \
+            --rom build/emulator-smoke/gbcrt_smoke.gb \
+            --boot build/emulator-smoke/gbcrt_boot_stub.bin \
+            --clock sync \
+            --frames 12 \
+            --out build/emulator-sameboy/smoke.ppm \
+            | tee build/emulator-sameboy/smoke.log
+          grep -q 'source: SameBoy' build/emulator-sameboy/smoke.log
+          python3 emulator/tests/validate_smoke_ppm.py \
+            build/emulator-sameboy/smoke.ppm
