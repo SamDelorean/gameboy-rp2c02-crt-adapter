@@ -13,6 +13,7 @@ add_library(gbcrt_core
     src/adapter_palette.c
     src/bridge.c
     src/clock_mode.c
+    src/source_model.c
     src/rp2c02_ext.c
     src/rp2c02_timing.c
     src/pattern_source.c
