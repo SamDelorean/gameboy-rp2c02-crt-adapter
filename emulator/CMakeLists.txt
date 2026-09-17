@@ -17,6 +17,7 @@ add_library(gbcrt_core
     src/sgb_lite.c
     src/rp2c02_ext.c
     src/rp2c02_timing.c
+    src/gbcrt_alt_video.c
     src/pattern_source.c
     src/gb_source.c
     src/gb_source_pattern.c
@@ -84,6 +85,10 @@ if(BUILD_TESTING)
     add_executable(test_bridge tests/test_bridge.c)
     target_link_libraries(test_bridge PRIVATE gbcrt_core)
     add_test(NAME bridge_geometry COMMAND test_bridge)
+
+    add_executable(test_alt_video tests/test_alt_video.c)
+    target_link_libraries(test_alt_video PRIVATE gbcrt_core)
+    add_test(NAME alternate_video_module COMMAND test_alt_video)
 
     add_executable(test_source tests/test_source.c)
     target_link_libraries(test_source PRIVATE gbcrt_core)
