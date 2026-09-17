@@ -140,8 +140,7 @@ static void apply_palette_mode(rp2c02_ext_t *ppu,
         if (frame->sgb_palette_valid) {
             adapter_palette_apply_sgb_rgb555(ppu, frame->sgb_palette_rgb555);
             *applied_sgb_sequence = frame->sgb_palette_sequence;
-            snprintf(label, label_size,
-                     "AUTO/SGB PAL%02X", frame->sgb_palette_command);
+            snprintf(label, label_size, "AUTO/SGB");
         }
         else {
             const adapter_palette_preset_t *fallback = adapter_palette_get(0u);
@@ -380,8 +379,8 @@ int main(int argc, char **argv)
 
         /*
          * Commit palette changes only at the comparison-frame boundary. Manual
-         * mode ignores later SGB traffic while source metadata keeps caching
-         * it; returning to AUTO/SGB immediately applies the latest valid
+         * mode ignores later SGB palette changes while source metadata keeps
+         * caching them; returning to AUTO/SGB immediately applies the latest
          * palette. This is logical UI behavior only, not a microcontroller
          * simulation.
          */
