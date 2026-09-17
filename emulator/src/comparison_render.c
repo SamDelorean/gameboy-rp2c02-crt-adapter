@@ -109,6 +109,7 @@ void comparison_render(rgb8_t *canvas,
     const rgb8_t panel_edge = {12, 12, 14};
     const rgb8_t video_edge = {205, 205, 210};
     const rgb8_t text = {238, 238, 240};
+    const rgb8_t secondary = {180, 180, 188};
 
     fill(canvas, bg);
     draw_menu(canvas, state);
@@ -169,6 +170,11 @@ void comparison_render(rgb8_t *canvas,
 
     if (state && state->source_name) {
         ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                          79, 635, 1, state->source_name, (rgb8_t){180, 180, 188});
+                          79, 635, 1, state->source_name, secondary);
     }
+
+    ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                      79, 652, 1,
+                      "ARROWS MOVE  Z A  X B  BKSP SELECT  ENTER START",
+                      secondary);
 }
