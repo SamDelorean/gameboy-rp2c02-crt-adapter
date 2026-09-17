@@ -69,13 +69,13 @@ Maintain a test-based compatibility matrix. Candidate families are not automatic
 
 ## 6. Palette table
 
-Open points:
+The virtual bench now implements a **16-preset candidate catalog** with exact RP2C02 codes and excludes `$0D`. Preset count is provisionally closed at 16.
 
-- 8 versus 16 initial presets,
-- exact color-code choices,
-- measured/modelled PPU palette basis,
-- RGB555 conversion method,
-- handling of unsafe/problematic PPU color codes.
+Still open before hardware freeze:
+
+- visual review/replacement/reordering of individual presets across representative DMG software;
+- measured/modelled RP2C02 palette basis for color-translation work;
+- final RGB555-to-RP2C02 quantization metric.
 
 ## 7. SGB palette handling
 
@@ -84,7 +84,9 @@ For the current virtual bench this is closed at a deliberately small scope: Same
 Still open:
 
 - final/measured RP2C02 palette basis for RGB555 quantization;
-- fallback palette choice.
+- final quantization metric.
+
+The `AUTO/SGB` fallback is now preset 1, `DMG LCD` (`$38/$28/$18/$08`).
 
 Physical `P14/P15` transport and a project-owned SGB packet decoder are outside the current emulator scope.
 

@@ -40,7 +40,7 @@ See [`source-compatibility.md`](source-compatibility.md).
 - Common clock reference retained.
 - V0.1 central interconnect fixed around Game Boy DMG/SGB -> Pico 2/RP2350 -> RP2C02.
 - Minimized write-only PPU host interface retained: R/W fixed LOW, A1/A2 tied, EXT0..EXT3 shared with D0..D3, passive reset.
-- Manual global palettes retained.
+- Manual global palettes retained; a 16-preset candidate catalog is implemented in the virtual bench and awaits visual review before hardware freeze.
 - SGB support in the virtual bench is limited to SameBoy-provided global palette state plus RGB555-to-RP2C02 translation.
 - One-button manual override of SGB-derived palettes retained.
 - Border generator separated logically from the scaler; black fixed for version 1.
@@ -57,7 +57,7 @@ See [`source-compatibility.md`](source-compatibility.md).
 - exact SGB/SGB-CPU source configurations and signal-access points to validate,
 - exact prototype PPU revision/device,
 - final EXT-output PIO/DMA timing implementation after RP2C02 timing validation,
-- final palette preset count/table,
+- final visual approval/freeze of the implemented 16-preset candidate palette table,
 - final mixed-license declaration,
 - production schematic and PCB,
 - final interactive emulator frontend implementation,

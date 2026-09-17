@@ -36,7 +36,7 @@ int main(void)
     assert(rgb_equal(out0[100][245], black));
     assert(rgb_equal(out0[100][255], black));
 
-    /* Manual preset 1 is intentionally the same DMG-green fallback as AUTO.
+    /* Manual preset 1 is intentionally the same DMG LCD fallback as AUTO.
      * Select preset 2 so this regression checks an actually different mapping. */
     gbcrt_alt_video_set_palette_mode(&alt, 2u);
     assert(gbcrt_alt_video_palette_mode(&alt) == 2u);

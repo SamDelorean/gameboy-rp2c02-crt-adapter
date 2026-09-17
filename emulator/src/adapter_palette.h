@@ -10,6 +10,7 @@ typedef struct {
     uint8_t shade_code[4];
 } adapter_palette_preset_t;
 
+/* Candidate manual catalog currently contains 16 entries; AUTO/SGB is separate. */
 unsigned adapter_palette_count(void);
 const adapter_palette_preset_t *adapter_palette_get(unsigned index);
 

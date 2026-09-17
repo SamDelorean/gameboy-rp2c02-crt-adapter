@@ -35,7 +35,7 @@ A debounced press advances exactly one mode.
 
 In the virtual bench, if SameBoy exposes a valid SGB four-color palette, AUTO/SGB may apply the translated palette globally.
 
-If no valid SGB palette has been received, AUTO/SGB uses a defined fallback palette, for example the normal DMG-green or another safe default selected during firmware finalization.
+If no valid SGB palette has been received, AUTO/SGB falls back to preset 1, `DMG LCD` (`$38/$28/$18/$08`).
 
 The most recently supplied valid SGB palette may be cached even while a manual mode is selected.
 
@@ -60,21 +60,36 @@ except when the user has deliberately selected AUTO/SGB.
 
 ## Manual preset count
 
-Current target: `8` or `16` curated manual presets, plus the AUTO/SGB mode.
+The virtual bench now uses **16 candidate manual presets**, plus the separate `AUTO/SGB` mode. The count is therefore provisionally closed at 16; individual entries may still be replaced or reordered during visual review before hardware freeze.
 
-The exact number remains open until the useful palette set is finalized.
+## Candidate 16-preset catalog
 
-## Candidate preset categories
+The virtual bench now carries a 16-entry candidate catalog. This is the set to exercise with real DMG software before declaring the hardware table frozen. `AUTO/SGB` remains a separate logical mode and is not counted among these 16 manual presets.
 
-- grayscale,
-- classic DMG green,
-- warm LCD green/yellow,
-- amber,
-- sepia,
-- blue,
-- blue-gray,
-- selected SGB-inspired palettes,
-- selected GBC-inspired palettes.
+| # | Preset | Shade 0 | Shade 1 | Shade 2 | Shade 3 | Purpose |
+|---:|---|---:|---:|---:|---:|---|
+| 1 | DMG LCD | `$38` | `$28` | `$18` | `$08` | Closest coherent RP2C02 approximation of SameBoy's classic DMG LCD reference. |
+| 2 | POCKET LCD | `$38` | `$10` | `$2D` | `$08` | Lower-saturation Pocket-style approximation; neutral middle levels are intentional. |
+| 3 | LIGHT TEAL | `$3B` | `$2C` | `$1C` | `$0C` | Teal family inspired by Game Boy Light appearance. |
+| 4 | GRAYSCALE | `$30` | `$10` | `$00` | `$0F` | Neutral four-level reference. |
+| 5 | LIME | `$39` | `$29` | `$19` | `$09` | Yellow-green ramp. |
+| 6 | GREEN | `$3A` | `$2A` | `$1A` | `$0A` | Saturated green ramp. |
+| 7 | MINT | `$3B` | `$2B` | `$1B` | `$0B` | Blue-green/mint ramp. |
+| 8 | CYAN | `$3C` | `$2C` | `$1C` | `$0C` | Cyan ramp. |
+| 9 | SKY BLUE | `$31` | `$21` | `$11` | `$01` | Light blue ramp. |
+| 10 | BLUE | `$32` | `$22` | `$12` | `$02` | Deeper blue ramp. |
+| 11 | VIOLET | `$33` | `$23` | `$13` | `$03` | Violet ramp. |
+| 12 | LILAC | `$34` | `$24` | `$14` | `$04` | Lilac/purple ramp. |
+| 13 | ROSE | `$35` | `$25` | `$15` | `$05` | Rose/magenta ramp. |
+| 14 | RED | `$36` | `$26` | `$16` | `$06` | Red ramp. |
+| 15 | AMBER | `$37` | `$27` | `$17` | `$07` | Amber/orange ramp. |
+| 16 | HIGH CONTRAST | `$30` | `$10` | `$2D` | `$0F` | Neutral high-separation diagnostic/utility ramp. |
+
+All entries obey the current monitor-LUT luminance order `shade 0 > shade 1 > shade 2 > shade 3`, contain four distinct codes, and avoid `$0D`. The catalog deliberately does not encode game identity; every preset is global and must remain usable with arbitrary four-shade DMG imagery.
+
+The first three LCD-inspired entries are approximations, not claims of exact CRT colorimetry. Their source references are SameBoy's DMG, MGB/Pocket and GBL/Light display palettes at the project-pinned SameBoy revision. The remaining entries are native RP2C02 hue ramps chosen for predictable four-level contrast.
+
+Visual review with several games may still replace or reorder entries before the hardware list is frozen. The palette editor is the intended tool for that review.
 
 ## Design rules
 
@@ -107,9 +122,9 @@ Useful editor-only operations are `REVERSE`, `RESET`, `PREV`, `NEXT` and `DONE`.
 
 ## SGB/GBC palette conversion
 
-Where a source palette is represented in RGB555/15-bit form, firmware or offline tooling may map each source color to a suitable PPU color.
+Where SameBoy exposes an SGB palette in RGB555/15-bit form, the virtual bench maps each source color to a suitable PPU color.
 
-A future conversion tool should preferably use a measured/modelled NES palette and perceptual color distance rather than simple Euclidean RGB distance.
+The current conversion still uses the provisional monitor LUT and simple RGB distance. A later refinement should wait until the project fixes a measured/modelled RP2C02 palette basis; otherwise a more elaborate metric would only add false precision.
 
 The converted palette should preserve the four-shade ordering required by the Game Boy image whenever practical.
 

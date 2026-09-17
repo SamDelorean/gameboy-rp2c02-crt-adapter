@@ -111,7 +111,7 @@ The four DMG shades are mapped globally to four PPU colors. The active palette i
 
 The V1 plan provides:
 
-- a small curated set of useful manual palettes selected with one button;
+- a 16-entry candidate manual palette catalog selected with one logical control;
 - optional automatic SGB-derived palette selection in the virtual bench using palette state already decoded by SameBoy;
 - immediate manual override of an SGB-derived palette by pressing the same button.
 

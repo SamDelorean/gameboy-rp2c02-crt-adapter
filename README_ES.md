@@ -107,7 +107,7 @@ Los cuatro tonos del Game Boy se mapean globalmente a cuatro colores de la PPU. 
 
 La versión 1 contempla:
 
-- un conjunto pequeño de paletas manuales curadas;
+- un catálogo candidato de 16 paletas manuales;
 - selección mediante un único botón;
 - uso opcional de paletas SGB en el banco virtual a partir del estado ya interpretado por SameBoy;
 - prioridad permanente del usuario: cualquier paleta SGB puede ser reemplazada con una pulsación del botón.
