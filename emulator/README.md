@@ -64,9 +64,9 @@ Implemented now:
 - selectable Game Boy clock model: `STOCK` or `SYNC`;
 - selectable virtual-bench RP2C02 palette presets;
 - automated regression tests for bridge geometry, source abstraction/joypad, RP2C02 color/palette behavior, RP2C02 raster timing and clock scheduling;
-- a donor-PUU pixel-exact test covering all `256x240 = 61,440` visible pixels;
+- a donor-PPU pixel-exact test covering all `256x240 = 61,440` visible pixels;
 - project-authored DMG boot stub and smoke-test ROM for copyright-clean functional CI;
-- GitHub Actions coverage for dependency-free, SDL2, donor-PUU and combined SameBoy + donor-PUU builds.
+- GitHub Actions coverage for dependency-free, SDL2, donor-PPU and combined SameBoy + donor-PPU builds.
 
 The pinned SameBoy library, our adapter, the donor PPU and the SDL2 viewer are tested in CI. The SameBoy job also executes the project-authored smoke ROM and verifies non-uniform image data independently in the SameBoy reference and RP2C02 image regions, plus black side borders. No commercial Game Boy ROM or Nintendo boot ROM is bundled with the project.
 
@@ -237,7 +237,7 @@ cmake --build build/emulator-viewer
 ./build/emulator-viewer/gbcrt_viewer --clock sync
 ```
 
-For the live SameBoy + donor-PUU comparison, bootstrap both dependencies and enable all three optional integrations:
+For the live SameBoy + donor-PPU comparison, bootstrap both dependencies and enable all three optional integrations:
 
 ```sh
 cmake -S emulator -B build/emulator-live \
@@ -339,7 +339,7 @@ Pinky/Visual2C02-derived tests and NESdev documentation remain useful independen
 
 1. dependency-free build, regression tests, and `STOCK`/`SYNC` execution;
 2. SDL2 viewer compilation and regression tests;
-3. pinned NESEmu donor-PUU build, full-pixel EXT-path regression, and preview rendering;
+3. pinned NESEmu donor-PPU build, full-pixel EXT-path regression, and preview rendering;
 4. pinned SameBoy + pinned NESEmu integration, project-authored ROM execution, and comparison-image validation.
 
 These paths are expected to remain green before emulator changes are considered integrated. External cores and SDL2 remain optional for end users, but their integration is checked automatically so optional code does not silently rot.

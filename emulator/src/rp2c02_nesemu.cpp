@@ -132,8 +132,15 @@ struct Harness {
         /* Load palette RAM with rendering disabled and increment-by-one. */
         write_register(RP2C02_REG_CTRL, 0u);
         write_register(RP2C02_REG_MASK, 0u);
-        set_ppu_address(0x3f00u);
         for (unsigned i = 0; i < 32u; ++i) {
+            /*
+             * $3F10/$14/$18/$1C mirror $3F00/$04/$08/$0C on a 2C02.
+             * Writing all 32 addresses linearly would therefore overwrite
+             * four already-loaded base entries. Address each unique slot
+             * explicitly and skip only those four mirrors.
+             */
+            if ((i & 0x13u) == 0x10u) continue;
+            set_ppu_address((uint16_t)(0x3f00u + i));
             write_register(RP2C02_REG_DATA, state.palette_ram[i] & 0x3fu);
         }
 

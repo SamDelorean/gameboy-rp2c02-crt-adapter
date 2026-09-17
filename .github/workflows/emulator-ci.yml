@@ -82,7 +82,7 @@ jobs:
       - name: Configure NESEmu-backed preview
         run: |
           cmake -S emulator -B build/emulator-nesemu \
-            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_BUILD_TYPE=Debug \
             -DGBCRT_ENABLE_NESEMU_PPU=ON \
             -DNESEMU_ROOT="$GITHUB_WORKSPACE/emulator/third_party/NESEmu"
 

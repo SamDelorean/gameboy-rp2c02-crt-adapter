@@ -12,11 +12,15 @@ SAMEBOY_DIR="$THIRD_PARTY_DIR/SameBoy"
 mkdir -p "$THIRD_PARTY_DIR"
 
 if [ ! -d "$SAMEBOY_DIR/.git" ]; then
-    git clone https://github.com/LIJI32/SameBoy.git "$SAMEBOY_DIR"
+    mkdir -p "$SAMEBOY_DIR"
+    git -C "$SAMEBOY_DIR" init
+    git -C "$SAMEBOY_DIR" remote add origin https://github.com/LIJI32/SameBoy.git
 fi
 
 cd "$SAMEBOY_DIR"
-git fetch origin "$SAMEBOY_COMMIT"
+# Only this pinned revision is required by the virtual bench; avoid cloning the
+# complete upstream history on every clean workstation or CI runner.
+git fetch --depth=1 origin "$SAMEBOY_COMMIT"
 git checkout --detach "$SAMEBOY_COMMIT"
 
 # We only need the reusable core archive plus the checked-in Core headers.

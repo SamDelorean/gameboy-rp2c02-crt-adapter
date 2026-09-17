@@ -102,6 +102,14 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    # The regression suite intentionally uses assert(). Keep those checks live
+    # even when a CI/configuration build selects Release and defines NDEBUG.
+    if(MSVC)
+        add_compile_options(/UNDEBUG)
+    else()
+        add_compile_options(-UNDEBUG)
+    endif()
+
     add_executable(test_bridge tests/test_bridge.c)
     target_link_libraries(test_bridge PRIVATE gbcrt_core)
     add_test(NAME bridge_geometry COMMAND test_bridge)
