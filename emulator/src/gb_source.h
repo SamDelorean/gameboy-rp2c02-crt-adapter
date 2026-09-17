@@ -4,6 +4,7 @@
 #include "bridge.h"
 #include "source_model.h"
 
+#include <stdbool.h>
 #include <stdint.h>
 
 typedef struct {
@@ -14,6 +15,16 @@ typedef struct {
     uint32_t reference_rgba[GB_H][GB_W];
 
     uint64_t frame_number;
+
+    /*
+     * Optional passive SGB-lite result captured from JOYP/P14/P15 traffic.
+     * This metadata belongs to the alternate-output adapter, not to SameBoy's
+     * normal rendered image. A valid palette remains cached across frames.
+     */
+    bool sgb_palette_valid;
+    uint16_t sgb_palette_rgb555[4];
+    uint8_t sgb_palette_command;
+    uint64_t sgb_palette_sequence;
 } gb_source_frame_t;
 
 typedef enum {
