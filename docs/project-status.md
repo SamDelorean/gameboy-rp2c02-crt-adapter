@@ -10,9 +10,9 @@ An earlier accidentally named repository beginning with a leading hyphen is **no
 
 ## Current phase
 
-**Architecture fixed at the central-interconnect level; firmware bring-up, pre-bench implementation, and hybrid-emulator validation tooling are in progress.**
+**Current work is centered on the hybrid virtual bench: SameBoy source, project scaler/palette bridge, and RP2C02 preview. Physical controller implementation is deferred from the emulator architecture.**
 
-The controller is no longer under selection. The current hardware baseline is RP2350 / Raspberry Pi Pico 2, and firmware V0.2 already implements the theoretical Game Boy capture path with PIO + DMA. Bench validation is still required before compatibility claims or PCB freeze.
+Earlier RP2350/Pico 2 and Arduino-Pico work is retained as historical prototype material, but it is not a current emulator requirement and must not drive the SGB palette path.
 
 A separate `emulator/` virtual-bench path now exists in the same repository. Emulator V0.2 contains the project scaler/bridge, a reduced RP2C02 EXT/palette model, a 16:9 side-by-side comparison renderer, a pluggable Game Boy source interface, and an optional SameBoy-backed ROM source. The dependency-free build and geometry/source tests have been exercised locally; real linking/running against a locally built SameBoy library remains to be verified on a machine with the dependency available.
 
@@ -22,7 +22,7 @@ The project is planned as a **Game Boy DMG / SGB** video adapter.
 
 DMG is the first reference platform for electrical validation. SGB/SGB-CPU-compatible source hardware is an explicit planned compatibility target and should use the same downstream framebuffer, scaler, border, palette and RP2C02 output path wherever the equivalent Game Boy video signals are accessible.
 
-Optional `P14/P15` SGB-lite palette recovery is an additional feature, not the definition of SGB video compatibility.
+For the current emulator path, SGB contributes only an already-decoded global palette from SameBoy; P14/P15 transport is not emulated.
 
 See [`source-compatibility.md`](source-compatibility.md).
 
@@ -31,7 +31,7 @@ See [`source-compatibility.md`](source-compatibility.md).
 - RP2C02-class NTSC PPU architecture retained.
 - Game Boy DMG / SGB source compatibility is an explicit architecture target.
 - **RP2350 selected as the V1 controller family; Raspberry Pi Pico 2 is the preferred prototype module.**
-- **Arduino IDE + Arduino-Pico selected as the V1 development environment.**
+- Arduino-Pico prototype work is historical/superseded for the current virtual-bench architecture.
 - PIO + DMA retained for timing-critical Game Boy capture and EXT output.
 - Direct Game Boy LCD/video capture retained.
 - V0.2 theoretical PIO/DMA capture engine implemented; bench timing validation remains pending.
@@ -41,7 +41,7 @@ See [`source-compatibility.md`](source-compatibility.md).
 - V0.1 central interconnect fixed around Game Boy DMG/SGB -> Pico 2/RP2350 -> RP2C02.
 - Minimized write-only PPU host interface retained: R/W fixed LOW, A1/A2 tied, EXT0..EXT3 shared with D0..D3, passive reset.
 - Manual global palettes retained.
-- Optional passive SGB-lite retained.
+- SGB support in the virtual bench is limited to SameBoy-provided global palette state plus RGB555-to-RP2C02 translation.
 - One-button manual override of SGB-derived palettes retained.
 - Border generator separated logically from the scaler; black fixed for version 1.
 - Clone PPU support treated as test-based compatibility.

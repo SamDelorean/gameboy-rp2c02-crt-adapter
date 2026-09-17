@@ -34,9 +34,9 @@ palette mapping
 RP2C02 EXT output
 ```
 
-### 2. Optional SGB-lite compatibility
+### 2. SGB palette compatibility in the virtual bench
 
-An SGB-capable source may additionally expose `P14/P15` so firmware can passively recover selected direct Super Game Boy palette commands.
+SameBoy supplies already-decoded SGB palette state. The project consumes one global four-color RGB555 palette and translates it to RP2C02 codes. Physical P14/P15 acquisition is deferred and is not part of the current emulator contract.
 
 This is optional. Failure to receive SGB palette traffic must never break the common video path or manual palette operation.
 
@@ -89,7 +89,7 @@ For each exact source hardware/configuration, record:
 8. loading/buffering/level-shifting used;
 9. successful reconstruction of a 160x144x2-bit frame;
 10. successful aspect-correct output through the common scaler;
-11. if applicable, `P14/P15` capture and SGB-lite behavior;
+11. if applicable, verify the SameBoy-provided global SGB palette translation;
 12. known limitations.
 
 ## Compatibility terminology
@@ -98,7 +98,7 @@ Use these terms carefully:
 
 - **planned compatibility** — architecture reserves and intends support, but hardware has not yet been validated;
 - **bench validated** — exact source configuration has passed the documented electrical/video tests;
-- **SGB-lite validated** — supported passive palette commands have also been observed and decoded;
+- **SGB palette translation validated** — SameBoy-provided RGB555 palette state has been translated and previewed through the RP2C02 path;
 - **full SGB emulation** — not a version-1 goal and must not be implied by either of the above.
 
 ## Design rule

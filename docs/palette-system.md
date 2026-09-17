@@ -33,11 +33,11 @@ A debounced press advances exactly one mode.
 
 ## AUTO/SGB mode
 
-If optional `P14/P15` inputs are connected and a supported direct Super Game Boy palette command is decoded, AUTO/SGB may apply the resulting four-color palette globally.
+In the virtual bench, if SameBoy exposes a valid SGB four-color palette, AUTO/SGB may apply the translated palette globally.
 
 If no valid SGB palette has been received, AUTO/SGB uses a defined fallback palette, for example the normal DMG-green or another safe default selected during firmware finalization.
 
-The most recently decoded valid SGB palette may be cached even while a manual mode is selected.
+The most recently supplied valid SGB palette may be cached even while a manual mode is selected.
 
 ## Manual override rule
 
@@ -46,14 +46,14 @@ The user must always be able to override an SGB-derived palette with the same si
 Therefore:
 
 - if an SGB palette is currently visible, the next button press leaves AUTO/SGB and selects manual preset 1;
-- while any manual preset is active, newly received SGB commands must not change the visible palette;
-- SGB traffic may still be decoded/cached in the background;
+- while any manual preset is active, updated SGB palette state must not change the visible palette;
+- SameBoy may continue updating the cached SGB palette in the background;
 - only after the user cycles back to AUTO/SGB may SGB regain control of the visible palette.
 
 This establishes a simple priority rule:
 
 ```text
-manual user selection > incoming SGB palette traffic
+manual user selection > automatic SGB palette state
 ```
 
 except when the user has deliberately selected AUTO/SGB.

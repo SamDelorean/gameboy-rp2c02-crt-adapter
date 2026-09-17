@@ -1,3 +1,7 @@
+# Historical Firmware Architecture
+
+> **Status:** superseded as a current implementation requirement. Retained as prototype/reference material; the virtual bench does not emulate this firmware.
+
 # Firmware Architecture and Operating Principles
 
 This document records the controller-independent software design basis. Version 1 favors small deterministic state machines over general-purpose graphics/video processing.

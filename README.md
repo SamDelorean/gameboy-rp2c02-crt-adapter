@@ -28,7 +28,7 @@ Game Boy DMG / SGB
 | aspect-correct fixed scaler  |
 | 160x144 -> 234x240           |
 | 11 black + image + 11 black  |
-| palette + optional SGB-lite  |
+| palette translation          |
 +------------------------------+
         |
         | EXT0..EXT3
@@ -50,7 +50,6 @@ A common frequency reference is planned for both the PPU and a modified Game Boy
 - **Arduino IDE + Arduino-Pico** selected as the practical V1 development environment.
 - Direct capture of the DMG LCD interface: `LD0`, `LD1`, `CP`, `CPL`, `ST`, and `S`.
 - Firmware V0.2 contains the theoretical PIO + DMA Game Boy capture engine; bench timing validation is still required.
-- Optional `P14/P15` taps for passive Super Game Boy palette-command listening.
 - Two complete 160x144x2-bit framebuffers (11,520 bytes total) for robust ping-pong operation.
 - Fixed vertical scaling from 144 to 240 using the exact `5/3` repetition relationship.
 - Fixed horizontal scaling from 160 to 234 using deterministic integer nearest-neighbor repetition; each source pixel is emitted once or twice.
@@ -80,7 +79,7 @@ The V1 controller decision is **RP2350**, with **Raspberry Pi Pico 2** as the pr
 
 The choice is driven mainly by system simplicity rather than raw performance: RP2350 keeps PIO + DMA while current digital GPIO can tolerate 5 V when correctly powered. That can remove the blanket level-shifting stage that an RP2040 implementation would need for the 5 V Game Boy LCD signals.
 
-The optimized direct interface uses **21 GPIO for the DMG baseline and 23 GPIO with optional P14/P15**, fitting inside the Pico 2's 26 exposed GPIO without PPU shift registers or GPIO expanders.
+The earlier Pico 2/RP2350 direct-interface study is retained as hardware prototype documentation, but it is not part of the current emulator contract.
 
 See [`docs/controller-selection.md`](docs/controller-selection.md) and [`hardware/interfaces.md`](hardware/interfaces.md).
 
@@ -101,7 +100,7 @@ Still pending before a validated firmware release:
 
 - real-hardware timing/electrical validation of the capture engine;
 - deterministic RP2C02 EXT PIO/DMA output engine;
-- optional SGB-lite packet decoder;
+- SGB global-palette translation from SameBoy RGB555 state;
 - final curated palette table.
 
 See [`firmware/README.md`](firmware/README.md) and [`firmware/capture-engine.md`](firmware/capture-engine.md).
@@ -113,25 +112,14 @@ The four DMG shades are mapped globally to four PPU colors. The active palette i
 The V1 plan provides:
 
 - a small curated set of useful manual palettes selected with one button;
-- optional automatic SGB-derived palette selection when compatible P14/P15 traffic is available;
+- optional automatic SGB-derived palette selection in the virtual bench using palette state already decoded by SameBoy;
 - immediate manual override of an SGB-derived palette by pressing the same button.
 
 Palette writes occur during VBlank/safe PPU timing.
 
-## Optional SGB-lite mode
+## SGB palette handling in the virtual bench
 
-If `P14/P15` are connected, firmware may passively decode the direct Super Game Boy palette commands:
-
-- `PAL01`
-- `PAL23`
-- `PAL03`
-- `PAL12`
-
-Received RGB555 colors can be quantized to suitable RP2C02 colors and used as a global four-color palette.
-
-This remains optional: if no valid SGB command is observed, normal manual-palette operation continues.
-
-The initial implementation deliberately does **not** emulate SGB controller-ID behavior, spatial attributes, tile transfers, or graphical borders.
+SameBoy owns SGB protocol interpretation. Project code consumes only the already-decoded four-color RGB555 palette, translates it to RP2C02 color codes, and applies it globally in `AUTO/SGB`. No project-owned P14/P15/JOYP decoder, regional color attributes, or SGB graphical borders are part of the current emulator path.
 
 ## PPU compatibility philosophy
 
