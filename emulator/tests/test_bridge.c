@@ -39,13 +39,23 @@ int main(void)
     uint8_t src[GB_H][GB_W];
     uint8_t dst[PPU_ACTIVE_H][PPU_ACTIVE_W];
     memset(src, 3, sizeof(src));
-    bridge_scale_frame(src, dst, 0);
+    bridge_scale_frame(src, dst, BRIDGE_BORDER_EXT_INDEX);
     for (unsigned y = 0; y < PPU_ACTIVE_H; ++y) {
-        for (unsigned x = 0; x < BRIDGE_BORDER_W; ++x) assert(dst[y][x] == 0u);
-        for (unsigned x = BRIDGE_BORDER_W; x < BRIDGE_BORDER_W + BRIDGE_IMAGE_W; ++x) assert(dst[y][x] == 3u);
-        for (unsigned x = BRIDGE_BORDER_W + BRIDGE_IMAGE_W; x < PPU_ACTIVE_W; ++x) assert(dst[y][x] == 0u);
+        for (unsigned x = 0; x < BRIDGE_BORDER_W; ++x) {
+            assert(dst[y][x] == BRIDGE_BORDER_EXT_INDEX);
+        }
+        for (unsigned x = BRIDGE_BORDER_W;
+             x < BRIDGE_BORDER_W + BRIDGE_IMAGE_W;
+             ++x) {
+            assert(dst[y][x] == 3u);
+        }
+        for (unsigned x = BRIDGE_BORDER_W + BRIDGE_IMAGE_W;
+             x < PPU_ACTIVE_W;
+             ++x) {
+            assert(dst[y][x] == BRIDGE_BORDER_EXT_INDEX);
+        }
     }
 
-    puts("bridge geometry OK: 160x144 -> 234x240 + 11/11 border");
+    puts("bridge geometry OK: 160x144 -> 234x240 + dedicated 11/11 border index");
     return 0;
 }
