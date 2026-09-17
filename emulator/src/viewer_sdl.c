@@ -103,6 +103,31 @@ static void release_all_game_keys(gb_source_t *source)
     }
 }
 
+static void request_next_palette(unsigned palette_mode, int *palette_pending)
+{
+    if (!palette_pending) return;
+    *palette_pending =
+        (int)((palette_mode + 1u) % (adapter_palette_count() + 1u));
+}
+
+static int mouse_to_canvas(SDL_Window *window,
+                           int mouse_x,
+                           int mouse_y,
+                           unsigned *canvas_x,
+                           unsigned *canvas_y)
+{
+    int window_w = 0;
+    int window_h = 0;
+    SDL_GetWindowSize(window, &window_w, &window_h);
+    if (window_w <= 0 || window_h <= 0 || mouse_x < 0 || mouse_y < 0) return 0;
+
+    *canvas_x = (unsigned)((unsigned long long)mouse_x * COMPARISON_W /
+                           (unsigned)window_w);
+    *canvas_y = (unsigned)((unsigned long long)mouse_y * COMPARISON_H /
+                           (unsigned)window_h);
+    return 1;
+}
+
 /* palette_mode 0 = AUTO/SGB, 1..N = manual presets. */
 static void apply_palette_mode(rp2c02_ext_t *ppu,
                                const gb_source_frame_t *frame,
@@ -270,6 +295,19 @@ int main(int argc, char **argv)
                      event.window.event == SDL_WINDOWEVENT_FOCUS_LOST) {
                 release_all_game_keys(&source);
             }
+            else if (event.type == SDL_MOUSEBUTTONDOWN &&
+                     event.button.button == SDL_BUTTON_LEFT) {
+                unsigned x = 0;
+                unsigned y = 0;
+                if (mouse_to_canvas(window,
+                                    event.button.x,
+                                    event.button.y,
+                                    &x,
+                                    &y) &&
+                    comparison_palette_button_contains(x, y)) {
+                    request_next_palette(palette_mode, &palette_pending);
+                }
+            }
             else if (event.type == SDL_KEYDOWN) {
                 const SDL_Keycode key = event.key.keysym.sym;
 
@@ -297,10 +335,7 @@ int main(int argc, char **argv)
                     apply_clock_mode(&scheduler, &view, next);
                 }
                 else if (key == SDLK_p) {
-                    /* Same cycle as the planned one-button hardware UI:
-                       AUTO/SGB -> manual 1..N -> AUTO/SGB. */
-                    palette_pending =
-                        (int)((palette_mode + 1u) % (adapter_palette_count() + 1u));
+                    request_next_palette(palette_mode, &palette_pending);
                 }
                 else if (view.menu_open &&
                          (key == SDLK_UP || key == SDLK_DOWN ||
@@ -345,9 +380,10 @@ int main(int argc, char **argv)
 
         /*
          * Commit palette changes only at the comparison-frame boundary. Manual
-         * mode ignores later SGB traffic while SameBoy/source metadata keeps
-         * caching it; returning to AUTO/SGB immediately applies the latest
-         * valid cached palette.
+         * mode ignores later SGB traffic while source metadata keeps caching
+         * it; returning to AUTO/SGB immediately applies the latest valid
+         * palette. This is logical UI behavior only, not a microcontroller
+         * simulation.
          */
         if (palette_pending >= 0) {
             palette_mode = (unsigned)palette_pending;
