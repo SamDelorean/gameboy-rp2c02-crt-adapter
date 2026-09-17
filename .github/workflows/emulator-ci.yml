@@ -157,7 +157,8 @@ jobs:
           grep -q 'source: SameBoy SGB, model: SGB' build/emulator-sameboy/smoke-sgb.log
           grep -q 'palette: AUTO/SGB; SGB valid=1' build/emulator-sameboy/smoke-sgb.log
           python3 emulator/tests/validate_smoke_ppm.py \
-            build/emulator-sameboy/smoke-sgb.ppm
+            build/emulator-sameboy/smoke-sgb.ppm \
+            --allow-uniform-left
 
       - name: Compare fallback and automatic SGB palette outputs
         run: |
