@@ -202,17 +202,16 @@ The SGB smoke path deliberately runs longer than the DMG smoke path. SameBoy's H
 
 Game Boy shades remain logical values `0..3`; changing the RP2C02 palette does not change SameBoy, source capture, scaling or framebuffer contents.
 
-The virtual bench currently provides a small preview set:
+The virtual bench currently provides the 16-entry candidate manual catalog documented in `docs/palette-system.md`:
 
 ```text
-DMG GREEN
-GRAYSCALE
-AMBER
-COOL BLUE
-LILAC
+DMG LCD       POCKET LCD    LIGHT TEAL    GRAYSCALE
+LIME          GREEN         MINT          CYAN
+SKY BLUE      BLUE          VIOLET        LILAC
+ROSE          RED           AMBER         HIGH CONTRAST
 ```
 
-These are **virtual-bench presets**, not a freeze of the final hardware preset count or exact code values. The hardware design still targets a small curated set plus optional `AUTO/SGB` behavior.
+`AUTO/SGB` is a separate logical mode. When SameBoy has no valid SGB palette, it falls back to `DMG LCD`. The 16-entry set is sufficient for the current proof of concept; individual colors remain subject to later hardware/CRT validation rather than blocking publication.
 
 Within the bridge:
 
