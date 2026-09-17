@@ -1,3 +1,11 @@
+/*
+ * Derived from SameBoy BootROMs/dmg_boot.asm and BootROMs/sgb_boot.asm
+ * at revision 213a12ce93d66b105a113debd9396306066a7cfc.
+ *
+ * SameBoy copyright (c) 2015-2026 Lior Halphon.
+ * Licensed under the Expat License; see
+ * emulator/third_party_licenses/SAMEBOY_LICENSE.txt.
+ */
 #include "sameboy_bootroms.h"
 
 const uint8_t gbcrt_sameboy_dmg_boot[256] = {
