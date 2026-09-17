@@ -18,16 +18,17 @@ project alternate-video bridge
       | 160x144 -> 234x240
       | 11 border + image + 11 border
       v
-reduced RP2C02 EXT model
+RP2C02 preview backend
       |
-      | 341x262 simplified NTSC raster
+      | pinned johnmph/NESEmu Ricoh2C02 when enabled
+      | reduced project model for dependency-free regression builds
       v
 comparison frontend
 ```
 
-The project does **not** emulate a complete NES either. The RP2C02 side models only the behavior needed by the proposed hardware adapter.
+The project does **not** emulate a complete NES either. The RP2C02 side uses only the PPU behavior needed by the proposed hardware adapter.
 
-This division is intentional: if SameBoy already models a piece of Game Boy behavior, prefer using it rather than recreating that behavior locally.
+This division is intentional: if SameBoy or a focused RP2C02 implementation already models a piece of behavior, prefer using it rather than recreating that behavior locally.
 
 The comparison output is designed around a 1280x720 16:9 canvas with two formally framed video regions:
 
@@ -38,7 +39,7 @@ The right panel explicitly identifies the `256x240` PPU region and the `11 + 234
 
 ## Current V0.3
 
-V0.3 keeps the dependency-free path and adds the first temporal and interactive comparison model.
+V0.3 keeps the dependency-free path and adds the first temporal and interactive comparison model. The optional donor-PPU build now replaces the preview's project-owned reduced PPU execution with a pinned real Ricoh2C02 implementation from `johnmph/NESEmu`, while preserving the reduced model as a regression oracle.
 
 Implemented now:
 
@@ -46,9 +47,11 @@ Implemented now:
 - exact vertical `144 -> 240` `2,1,2` repetition pattern;
 - `11 + 234 + 11` output composition;
 - Game Boy shades use EXT indices `0..3` while EXT index `4` is reserved for the fixed black V1 side borders;
-- reduced logical `EXT -> palette RAM` RP2C02 model;
+- reduced logical `EXT -> palette RAM` RP2C02 model for dependency-free tests;
+- optional pinned `johnmph/NESEmu` Ricoh2C02 backend for the actual preview path;
+- donor PPU input through its existing EXT interface and output through its existing pixel callback;
 - all 64 six-bit RP2C02 color values are preserved by the monitor-preview LUT rather than discarding the two value/luma bits;
-- simplified RP2C02 `341x262` raster timing with visible region and VBlank boundaries;
+- simplified project `341x262` raster timing remains as an independent regression model;
 - deterministic 160x144 two-bit test-pattern source;
 - generic `gb_source` interface;
 - optional SameBoy source using the normal SameBoy framebuffer as the left reference;
@@ -61,12 +64,13 @@ Implemented now:
 - selectable Game Boy clock model: `STOCK` or `SYNC`;
 - selectable virtual-bench RP2C02 palette presets;
 - automated regression tests for bridge geometry, source abstraction/joypad, RP2C02 color/palette behavior, RP2C02 raster timing and clock scheduling;
+- a donor-PUU pixel-exact test covering all `256x240 = 61,440` visible pixels;
 - project-authored DMG boot stub and smoke-test ROM for copyright-clean functional CI;
-- GitHub Actions build/test coverage for the dependency-free core, SDL2 viewer build and pinned SameBoy functional path.
+- GitHub Actions coverage for dependency-free, SDL2, donor-PUU and combined SameBoy + donor-PUU builds.
 
-The pinned SameBoy library, our adapter, and the SDL2 viewer all compile in CI. The SameBoy job also executes the project-authored smoke ROM and verifies non-uniform image data independently in the SameBoy reference and RP2C02 image regions, plus black side borders. No commercial Game Boy ROM or Nintendo boot ROM is bundled with the project.
+The pinned SameBoy library, our adapter, the donor PPU and the SDL2 viewer are tested in CI. The SameBoy job also executes the project-authored smoke ROM and verifies non-uniform image data independently in the SameBoy reference and RP2C02 image regions, plus black side borders. No commercial Game Boy ROM or Nintendo boot ROM is bundled with the project.
 
-The RGB LUT in `rp2c02_ext.c` is **only a provisional monitor approximation**. It now distinguishes all six PPU color-code bits, but it is not yet a composite NTSC waveform/decoder model. NESdev documents the RP2C02 color code as `VV HHHH`: two value bits plus four hue bits. Canonical project black remains `$0F`; color `$0D` should not be used for final presets.
+The RGB LUT in `rp2c02_ext.c` is **only a monitor preview**. It distinguishes all six PPU color-code bits, but it does not synthesize or decode the analog composite waveform. The donor PPU produces the native six-bit RP2C02 color code; the LUT only turns that code into desktop RGB. Canonical project black remains `$0F`; color `$0D` should not be used for final presets.
 
 ## Clock comparison
 
@@ -106,6 +110,8 @@ ctest --test-dir build/emulator --output-on-failure
 ./build/emulator/gbcrt_emu --clock sync --out build/emulator/comparison.ppm
 ```
 
+This path intentionally uses the reduced project PPU model and requires no external emulator dependency.
+
 To exercise the stock-clock drift scheduler without SameBoy:
 
 ```sh
@@ -117,6 +123,37 @@ To exercise the stock-clock drift scheduler without SameBoy:
 
 `--frames` counts RP2C02 output frames. In `STOCK` mode, the source does not necessarily advance for every output frame; in `SYNC` mode it advances 1:1.
 
+## NESEmu-backed RP2C02 preview
+
+The preferred PPU preview reuses only the Ricoh2C02 implementation from `johnmph/NESEmu`, pinned to:
+
+```text
+4966aa09259ef965d4b6bd2635a1dfe57a8569cb
+```
+
+Fetch the pinned donor checkout:
+
+```sh
+sh ./emulator/scripts/bootstrap_nesemu.sh
+```
+
+Then build the same virtual bench with the donor PPU enabled:
+
+```sh
+cmake -S emulator -B build/emulator-nesemu \
+  -DGBCRT_ENABLE_NESEMU_PPU=ON \
+  -DNESEMU_ROOT="$PWD/emulator/third_party/NESEmu"
+cmake --build build/emulator-nesemu
+ctest --test-dir build/emulator-nesemu --output-on-failure
+./build/emulator-nesemu/gbcrt_emu \
+  --clock sync \
+  --out build/emulator-nesemu/comparison.ppm
+```
+
+This does **not** run NESEmu's CPU, APU, cartridge system, mapper code or frontend. The local C++ wrapper instantiates only `Ppu::Chip<Ricoh2C02>`, sends the project EXT nibble stream through `exts()`, loads palette/register state through the PPU write path, and receives the resulting six-bit color codes through `plotPixel()`.
+
+The dedicated `rp2c02_nesemu_ext_path` regression verifies every visible pixel against known EXT indices and palette values, catching horizontal or vertical phase mistakes immediately.
+
 ## SameBoy-backed ROM build
 
 SameBoy is deliberately kept outside this repository. The helper script pins the first integration to commit:
@@ -125,18 +162,21 @@ SameBoy is deliberately kept outside this repository. The helper script pins the
 213a12ce93d66b105a113debd9396306066a7cfc
 ```
 
-Bootstrap and build the static core with:
+For the preferred combined preview, bootstrap both external cores:
 
 ```sh
 sh ./emulator/scripts/bootstrap_sameboy.sh
+sh ./emulator/scripts/bootstrap_nesemu.sh
 ```
 
-Then configure this emulator with the resulting checkout:
+Then configure SameBoy plus the donor RP2C02:
 
 ```sh
 cmake -S emulator -B build/emulator-sameboy \
   -DGBCRT_ENABLE_SAMEBOY=ON \
-  -DSAMEBOY_ROOT="$PWD/emulator/third_party/SameBoy"
+  -DSAMEBOY_ROOT="$PWD/emulator/third_party/SameBoy" \
+  -DGBCRT_ENABLE_NESEMU_PPU=ON \
+  -DNESEMU_ROOT="$PWD/emulator/third_party/NESEmu"
 
 cmake --build build/emulator-sameboy
 ```
@@ -154,7 +194,7 @@ Run a user-supplied ROM and DMG boot ROM:
 
 No commercial ROM or Nintendo boot ROM is stored in this repository.
 
-CI generates `gbcrt_boot_stub.bin` and `gbcrt_smoke.gb` from `emulator/tests/generate_smoke_rom.py`. These files are entirely project-authored and are used only to prove that actual Game Boy code executes inside SameBoy and reaches both comparison paths.
+CI generates `gbcrt_boot_stub.bin` and `gbcrt_smoke.gb` from `emulator/tests/generate_smoke_rom.py`. These files are entirely project-authored and are used only to prove that actual Game Boy code executes inside SameBoy and reaches the donor RP2C02 preview path.
 
 ## Alternate-output palettes
 
@@ -197,13 +237,15 @@ cmake --build build/emulator-viewer
 ./build/emulator-viewer/gbcrt_viewer --clock sync
 ```
 
-For the live SameBoy comparison, enable both optional integrations:
+For the live SameBoy + donor-PUU comparison, bootstrap both dependencies and enable all three optional integrations:
 
 ```sh
 cmake -S emulator -B build/emulator-live \
   -DGBCRT_ENABLE_SDL2=ON \
   -DGBCRT_ENABLE_SAMEBOY=ON \
-  -DSAMEBOY_ROOT="$PWD/emulator/third_party/SameBoy"
+  -DSAMEBOY_ROOT="$PWD/emulator/third_party/SameBoy" \
+  -DGBCRT_ENABLE_NESEMU_PPU=ON \
+  -DNESEMU_ROOT="$PWD/emulator/third_party/NESEmu"
 cmake --build build/emulator-live
 
 ./build/emulator-live/gbcrt_viewer \
@@ -255,7 +297,7 @@ SameBoy renders the normal 160x144 DMG frame using a fixed DMG palette. The adap
                          project bridge
                                |
                                v
-                         RP2C02 EXT model
+                      donor Ricoh2C02 PPU
                               right
 ```
 
@@ -277,25 +319,27 @@ If we later need signal-level diagnostics, the preferred approach is to reuse th
 
 ## RP2C02 model policy
 
-The emulator models only what the hardware project depends on:
+The preferred preview uses the pinned NESEmu Ricoh2C02 core only for the behavior the hardware project depends on:
 
-- 341x262 NTSC raster timing where timing matters;
+- 341x262 NTSC PPU raster timing;
 - VBlank/frame boundaries;
 - palette RAM behavior relevant to EXT input;
 - EXT0..EXT3 external index path;
-- six-bit RP2C02 color values;
-- later, composite/NTSC waveform and decoder behavior only if useful for validation.
+- native six-bit RP2C02 color values.
 
-CPU, APU, mappers, CHR rendering, nametables, OAM and sprites are out of scope.
+The project-owned reduced PPU remains for dependency-free regression tests and independent comparison. CPU, APU, mappers, CHR game rendering, nametables, OAM/sprite game rendering and the donor frontend are out of scope.
 
-Pinky/Visual2C02-derived tests and NESdev documentation are useful independent references for validating the reduced PPU model; they are not a reason to import a complete NES emulator.
+Analog composite waveform generation, NTSC decoder simulation, CRT shaders and modern presentation filters are also out of scope. The desktop preview intentionally stops at a reasonable RGB visualization of the PPU's six-bit color code.
+
+Pinky/Visual2C02-derived tests and NESdev documentation remain useful independent references. Emulator-to-emulator agreement is not treated as a substitute for later hardware validation.
 
 ## Continuous integration
 
-`.github/workflows/emulator-ci.yml` validates three paths:
+`.github/workflows/emulator-ci.yml` validates four paths:
 
 1. dependency-free build, regression tests, and `STOCK`/`SYNC` execution;
 2. SDL2 viewer compilation and regression tests;
-3. pinned SameBoy static-library integration, regression tests, project-authored ROM execution, and comparison-image validation.
+3. pinned NESEmu donor-PUU build, full-pixel EXT-path regression, and preview rendering;
+4. pinned SameBoy + pinned NESEmu integration, project-authored ROM execution, and comparison-image validation.
 
-The three paths are expected to remain green before emulator changes are considered integrated. SameBoy and SDL2 remain optional for end users, but their integration is checked automatically so optional code does not silently rot.
+These paths are expected to remain green before emulator changes are considered integrated. External cores and SDL2 remain optional for end users, but their integration is checked automatically so optional code does not silently rot.
