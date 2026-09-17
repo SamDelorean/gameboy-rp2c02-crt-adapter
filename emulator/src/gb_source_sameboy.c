@@ -2,7 +2,7 @@
 
 #ifdef GBCRT_ENABLE_SAMEBOY
 
-#include <sameboy/gb.h>
+#include "Core/gb.h"
 
 #include <limits.h>
 #include <stdlib.h>
