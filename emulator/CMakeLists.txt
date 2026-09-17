@@ -137,6 +137,10 @@ if(BUILD_TESTING)
     target_link_libraries(test_clock_mode PRIVATE gbcrt_core)
     add_test(NAME clock_mode COMMAND test_clock_mode)
 
+    add_executable(test_palette_editor tests/test_palette_editor.c)
+    target_link_libraries(test_palette_editor PRIVATE gbcrt_core)
+    add_test(NAME palette_editor_hitboxes COMMAND test_palette_editor)
+
     if(GBCRT_ENABLE_NESEMU_PPU)
         add_executable(test_rp2c02_nesemu tests/test_rp2c02_nesemu.c)
         target_link_libraries(test_rp2c02_nesemu PRIVATE gbcrt_core)

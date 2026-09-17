@@ -30,6 +30,16 @@ int main(void)
     /* Preset lookup/cycling is deliberately modular. */
     assert(adapter_palette_get(count) == adapter_palette_get(0));
 
+    /* The editor path accepts arbitrary RP2C02 codes but keeps V1 border black. */
+    const uint8_t custom[4] = {0x3cu, 0x2bu, 0x17u, 0x0fu};
+    rp2c02_ext_t custom_ppu;
+    rp2c02_ext_reset(&custom_ppu);
+    adapter_palette_apply_codes(&custom_ppu, custom);
+    for (unsigned shade = 0; shade < 4u; ++shade) {
+        assert(rp2c02_ext_palette_code(&custom_ppu, (uint8_t)shade) == custom[shade]);
+    }
+    assert(rp2c02_ext_palette_code(&custom_ppu, BRIDGE_BORDER_EXT_INDEX) == 0x0fu);
+
     /* SGB automatic conversion is separate from the curated manual presets. */
     const uint16_t sgb[4] = {
         0x7fffu, /* white */

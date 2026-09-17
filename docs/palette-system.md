@@ -86,6 +86,25 @@ The exact number remains open until the useful palette set is finalized.
 - keep SGB control optional,
 - never allow SGB traffic to prevent manual palette selection.
 
+## Virtual-bench palette editor
+
+The SDL engineering viewer may expose a palette editor for building and validating the curated preset catalog. This editor is a development tool only; it does not change the V1 hardware one-button user interface.
+
+The editor operates directly in RP2C02 color-code space (`$00-$3F`). It presents the four Game Boy shades explicitly as:
+
+```text
+SHADE 0  -> lightest
+SHADE 1
+SHADE 2
+SHADE 3  -> darkest
+```
+
+The display should make the `LIGHTEST -> DARKEST` direction visually obvious so a user does not need to remember Game Boy shade polarity while constructing a palette. Editing changes only the four palette entries; capture, scaling and the framebuffer remain unchanged.
+
+The full 64-code RP2C02 table may be shown in the editor because this is an engineering tool, even though the final hardware catalog exposes only curated presets. The right-hand RP2C02 preview remains visible while editing so contrast and shade separation can be judged on live Game Boy output.
+
+Useful editor-only operations are `REVERSE`, `RESET`, `PREV`, `NEXT` and `DONE`. A custom edit remains session-local until it is deliberately promoted into the source preset catalog.
+
 ## SGB/GBC palette conversion
 
 Where a source palette is represented in RGB555/15-bit form, firmware or offline tooling may map each source color to a suitable PPU color.

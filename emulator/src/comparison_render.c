@@ -60,6 +60,57 @@ int comparison_palette_button_contains(unsigned x, unsigned y)
            y < COMPARISON_PALETTE_BUTTON_Y + COMPARISON_PALETTE_BUTTON_H;
 }
 
+int comparison_palette_editor_shade_at(unsigned x, unsigned y, unsigned *shade)
+{
+    if (y < COMPARISON_EDITOR_SHADE_Y ||
+        y >= COMPARISON_EDITOR_SHADE_Y + COMPARISON_EDITOR_SHADE_H) {
+        return 0;
+    }
+
+    for (unsigned i = 0; i < 4u; ++i) {
+        const unsigned x0 = COMPARISON_EDITOR_SHADE_X +
+            i * (COMPARISON_EDITOR_SHADE_W + COMPARISON_EDITOR_SHADE_GAP);
+        if (x >= x0 && x < x0 + COMPARISON_EDITOR_SHADE_W) {
+            if (shade) *shade = i;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+int comparison_palette_editor_code_at(unsigned x, unsigned y, uint8_t *code)
+{
+    const unsigned grid_w = 16u * COMPARISON_EDITOR_CELL_W;
+    const unsigned grid_h = 4u * COMPARISON_EDITOR_CELL_H;
+    if (x < COMPARISON_EDITOR_GRID_X || x >= COMPARISON_EDITOR_GRID_X + grid_w ||
+        y < COMPARISON_EDITOR_GRID_Y || y >= COMPARISON_EDITOR_GRID_Y + grid_h) {
+        return 0;
+    }
+
+    const unsigned column = (x - COMPARISON_EDITOR_GRID_X) / COMPARISON_EDITOR_CELL_W;
+    const unsigned row = (y - COMPARISON_EDITOR_GRID_Y) / COMPARISON_EDITOR_CELL_H;
+    if (code) *code = (uint8_t)((row << 4) | column);
+    return 1;
+}
+
+comparison_palette_editor_action_t comparison_palette_editor_action_at(unsigned x, unsigned y)
+{
+    if (y < COMPARISON_EDITOR_BUTTON_Y ||
+        y >= COMPARISON_EDITOR_BUTTON_Y + COMPARISON_EDITOR_BUTTON_H) {
+        return COMPARISON_EDITOR_ACTION_NONE;
+    }
+
+    for (unsigned i = 0; i < 5u; ++i) {
+        const unsigned x0 = COMPARISON_EDITOR_SHADE_X +
+            i * (COMPARISON_EDITOR_BUTTON_W + COMPARISON_EDITOR_BUTTON_GAP);
+        if (x >= x0 && x < x0 + COMPARISON_EDITOR_BUTTON_W) {
+            return (comparison_palette_editor_action_t)
+                (COMPARISON_EDITOR_ACTION_REVERSE + i);
+        }
+    }
+    return COMPARISON_EDITOR_ACTION_NONE;
+}
+
 static void draw_menu(rgb8_t *canvas, const comparison_view_state_t *state)
 {
     const rgb8_t bar = {30, 30, 34};
@@ -83,7 +134,7 @@ static void draw_menu(rgb8_t *canvas, const comparison_view_state_t *state)
 
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
                       350, 18, 1,
-                      "M MENU   C CLOCK   SPACE PAUSE   Q QUIT",
+                      "M MENU   C CLOCK   E EDIT PALETTE   SPACE PAUSE   Q QUIT",
                       text);
 
     /*
@@ -134,6 +185,141 @@ static void draw_menu(rgb8_t *canvas, const comparison_view_state_t *state)
                       42, 96, 1, "STOCK GB   4.194304 MHZ", accent);
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
                       42, 132, 1, "SYNC       4.220355 MHZ", accent);
+}
+
+static void draw_palette_editor(rgb8_t *canvas, const comparison_view_state_t *state)
+{
+    if (!state || !state->palette_editor_open) return;
+
+    const rgb8_t panel = {22, 22, 26};
+    const rgb8_t edge = {205, 205, 210};
+    const rgb8_t text = {238, 238, 240};
+    const rgb8_t secondary = {180, 180, 188};
+    const rgb8_t card = {48, 48, 54};
+    const rgb8_t active = {245, 245, 245};
+    const rgb8_t warning = {210, 82, 82};
+
+    rect(canvas,
+         COMPARISON_EDITOR_X,
+         COMPARISON_EDITOR_Y,
+         COMPARISON_EDITOR_W,
+         COMPARISON_EDITOR_H,
+         panel);
+    frame_rect(canvas,
+               COMPARISON_EDITOR_X,
+               COMPARISON_EDITOR_Y,
+               COMPARISON_EDITOR_W,
+               COMPARISON_EDITOR_H,
+               3,
+               edge);
+
+    ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                      70, 98, 2, "PALETTE EDITOR", text);
+    ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                      70, 136, 1,
+                      "SELECT A GAME BOY SHADE, THEN CHOOSE AN RP2C02 COLOR CODE",
+                      secondary);
+    ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                      70, 160, 1,
+                      "LIGHTEST   SHADE 0 > SHADE 1 > SHADE 2 > SHADE 3   DARKEST",
+                      active);
+
+    for (unsigned shade = 0; shade < 4u; ++shade) {
+        const unsigned x = COMPARISON_EDITOR_SHADE_X +
+            shade * (COMPARISON_EDITOR_SHADE_W + COMPARISON_EDITOR_SHADE_GAP);
+        const uint8_t code = state->palette_editor_codes[shade] & 0x3fu;
+        char label[24];
+        snprintf(label, sizeof(label), "SHADE %u", shade);
+
+        rect(canvas, x, COMPARISON_EDITOR_SHADE_Y,
+             COMPARISON_EDITOR_SHADE_W, COMPARISON_EDITOR_SHADE_H, card);
+        frame_rect(canvas, x, COMPARISON_EDITOR_SHADE_Y,
+                   COMPARISON_EDITOR_SHADE_W, COMPARISON_EDITOR_SHADE_H,
+                   shade == state->palette_editor_selected_shade ? 3u : 1u,
+                   shade == state->palette_editor_selected_shade ? active : secondary);
+        ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                          x + 28, COMPARISON_EDITOR_SHADE_Y + 8, 1, label, text);
+        rect(canvas, x + 8, COMPARISON_EDITOR_SHADE_Y + 26,
+             COMPARISON_EDITOR_SHADE_W - 16, 25, rp2c02_demo_rgb(code));
+        snprintf(label, sizeof(label), "0X%02X", code);
+        ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                          x + 44, COMPARISON_EDITOR_SHADE_Y + 56, 1, label, text);
+    }
+
+    char selected[64];
+    snprintf(selected, sizeof(selected),
+             "RP2C02 COLOR TABLE 0X00-0X3F   EDITING SHADE %u",
+             state->palette_editor_selected_shade & 3u);
+    ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                      74, 292, 1, selected, text);
+
+    const uint8_t selected_code =
+        state->palette_editor_codes[state->palette_editor_selected_shade & 3u] & 0x3fu;
+    for (unsigned row = 0; row < 4u; ++row) {
+        for (unsigned column = 0; column < 16u; ++column) {
+            const uint8_t code = (uint8_t)((row << 4) | column);
+            const unsigned x = COMPARISON_EDITOR_GRID_X +
+                column * COMPARISON_EDITOR_CELL_W;
+            const unsigned y = COMPARISON_EDITOR_GRID_Y +
+                row * COMPARISON_EDITOR_CELL_H;
+            char label[4];
+            snprintf(label, sizeof(label), "%02X", code);
+
+            rect(canvas, x, y,
+                 COMPARISON_EDITOR_CELL_W - 2u,
+                 COMPARISON_EDITOR_CELL_H - 2u,
+                 card);
+            rect(canvas, x + 2, y + 2,
+                 COMPARISON_EDITOR_CELL_W - 6u, 18u,
+                 rp2c02_demo_rgb(code));
+            if (code == selected_code) {
+                frame_rect(canvas, x, y,
+                           COMPARISON_EDITOR_CELL_W - 2u,
+                           COMPARISON_EDITOR_CELL_H - 2u,
+                           2u, active);
+            }
+            if (code == 0x0du) {
+                frame_rect(canvas, x, y,
+                           COMPARISON_EDITOR_CELL_W - 2u,
+                           COMPARISON_EDITOR_CELL_H - 2u,
+                           2u, warning);
+            }
+            ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                              x + 8, y + 24, 1, label, text);
+        }
+    }
+
+    ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                      74, 470, 1,
+                      "0D MARKED: AVOID FOR FINAL NTSC HARDWARE PRESETS",
+                      warning);
+
+    static const char *labels[5] = {"REVERSE", "RESET", "PREV", "NEXT", "DONE"};
+    for (unsigned i = 0; i < 5u; ++i) {
+        const unsigned x = COMPARISON_EDITOR_SHADE_X +
+            i * (COMPARISON_EDITOR_BUTTON_W + COMPARISON_EDITOR_BUTTON_GAP);
+        rect(canvas, x, COMPARISON_EDITOR_BUTTON_Y,
+             COMPARISON_EDITOR_BUTTON_W, COMPARISON_EDITOR_BUTTON_H, card);
+        frame_rect(canvas, x, COMPARISON_EDITOR_BUTTON_Y,
+                   COMPARISON_EDITOR_BUTTON_W, COMPARISON_EDITOR_BUTTON_H,
+                   2u, secondary);
+        ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                          x + 12, COMPARISON_EDITOR_BUTTON_Y + 13,
+                          1, labels[i], text);
+    }
+
+    ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                      74, 558, 1,
+                      "E OR ESC: DONE   R: REVERSE   1-4: SELECT SHADE",
+                      secondary);
+    snprintf(selected, sizeof(selected),
+             "CURRENT: S0=%02X  S1=%02X  S2=%02X  S3=%02X",
+             state->palette_editor_codes[0],
+             state->palette_editor_codes[1],
+             state->palette_editor_codes[2],
+             state->palette_editor_codes[3]);
+    ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                      74, 586, 1, selected, text);
 }
 
 static void draw_rp2c02_frame(rgb8_t *canvas,
@@ -269,4 +455,6 @@ void comparison_render(rgb8_t *canvas,
         ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
                           760, 650, 1, state->palette_name, text);
     }
+
+    draw_palette_editor(canvas, state);
 }

@@ -29,17 +29,24 @@ const adapter_palette_preset_t *adapter_palette_get(unsigned index)
     return &presets[index % count];
 }
 
+void adapter_palette_apply_codes(rp2c02_ext_t *ppu,
+                                 const uint8_t shade_code[4])
+{
+    if (!ppu || !shade_code) return;
+
+    for (unsigned shade = 0; shade < BRIDGE_SHADE_COUNT; ++shade) {
+        rp2c02_ext_write_palette(ppu, shade, shade_code[shade]);
+    }
+
+    /* V1 side borders remain fixed canonical black regardless of palette. */
+    rp2c02_ext_write_palette(ppu, BRIDGE_BORDER_EXT_INDEX, 0x0Fu);
+}
+
 void adapter_palette_apply(rp2c02_ext_t *ppu, unsigned index)
 {
     const adapter_palette_preset_t *preset = adapter_palette_get(index);
     if (!ppu || !preset) return;
-
-    for (unsigned shade = 0; shade < BRIDGE_SHADE_COUNT; ++shade) {
-        rp2c02_ext_write_palette(ppu, shade, preset->shade_code[shade]);
-    }
-
-    /* V1 side borders remain fixed canonical black regardless of preset. */
-    rp2c02_ext_write_palette(ppu, BRIDGE_BORDER_EXT_INDEX, 0x0Fu);
+    adapter_palette_apply_codes(ppu, preset->shade_code);
 }
 
 static unsigned expand5(unsigned value)
@@ -81,12 +88,9 @@ void adapter_palette_apply_sgb_rgb555(rp2c02_ext_t *ppu,
 {
     if (!ppu || !rgb555) return;
 
+    uint8_t shade_code[BRIDGE_SHADE_COUNT];
     for (unsigned shade = 0; shade < BRIDGE_SHADE_COUNT; ++shade) {
-        rp2c02_ext_write_palette(ppu,
-                                 shade,
-                                 adapter_palette_quantize_rgb555(rgb555[shade]));
+        shade_code[shade] = adapter_palette_quantize_rgb555(rgb555[shade]);
     }
-
-    /* Automatic SGB colorization never changes the V1 black side borders. */
-    rp2c02_ext_write_palette(ppu, BRIDGE_BORDER_EXT_INDEX, 0x0Fu);
+    adapter_palette_apply_codes(ppu, shade_code);
 }
