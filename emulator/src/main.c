@@ -17,7 +17,7 @@ static void usage(const char *argv0)
             "usage: %s [--out comparison.ppm] [--frames N] [--clock stock|sync]"
             " [--source-model dmg|sgb]"
 #ifdef GBCRT_ENABLE_SAMEBOY
-            " [--rom game.gb --boot boot.bin]"
+            " [--rom game.gb [--boot boot.bin]]"
 #endif
             "\n",
             argv0);
@@ -43,10 +43,6 @@ static int create_source(gb_source_t *source,
 {
     if (rom) {
 #ifdef GBCRT_ENABLE_SAMEBOY
-        if (!boot) {
-            fprintf(stderr, "--rom currently requires --boot for the SameBoy source\n");
-            return -1;
-        }
         if (gb_source_sameboy_create_model(source, rom, boot, source_model) != 0) {
             fprintf(stderr, "failed to initialize SameBoy %s source\n",
                     gbcrt_source_model_name(source_model));
