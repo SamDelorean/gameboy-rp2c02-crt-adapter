@@ -25,19 +25,29 @@ jobs:
       - name: Run regression tests
         run: ctest --test-dir build/emulator --output-on-failure
 
-      - name: Exercise synchronized clock path
+      - name: Exercise synchronized DMG clock path
         run: |
           ./build/emulator/gbcrt_emu \
+            --source-model dmg \
             --clock sync \
             --frames 1000 \
             --out build/emulator/comparison-sync.ppm
 
-      - name: Exercise stock clock drift path
+      - name: Exercise stock DMG drift path
         run: |
           ./build/emulator/gbcrt_emu \
+            --source-model dmg \
             --clock stock \
             --frames 1000 \
-            --out build/emulator/comparison-stock.ppm
+            --out build/emulator/comparison-stock-dmg.ppm
+
+      - name: Exercise stock SGB drift path
+        run: |
+          ./build/emulator/gbcrt_emu \
+            --source-model sgb \
+            --clock stock \
+            --frames 1000 \
+            --out build/emulator/comparison-stock-sgb.ppm
 
   sdl-viewer-build:
     runs-on: ubuntu-latest
@@ -85,15 +95,30 @@ jobs:
       - name: Generate project-authored smoke ROM
         run: python3 emulator/tests/generate_smoke_rom.py build/emulator-smoke
 
-      - name: Execute smoke ROM through SameBoy and alternate video path
+      - name: Execute smoke ROM through SameBoy DMG and alternate video path
         run: |
           ./build/emulator-sameboy/gbcrt_emu \
+            --source-model dmg \
             --rom build/emulator-smoke/gbcrt_smoke.gb \
             --boot build/emulator-smoke/gbcrt_boot_stub.bin \
             --clock sync \
             --frames 12 \
-            --out build/emulator-sameboy/smoke.ppm \
-            | tee build/emulator-sameboy/smoke.log
-          grep -q 'source: SameBoy' build/emulator-sameboy/smoke.log
+            --out build/emulator-sameboy/smoke-dmg.ppm \
+            | tee build/emulator-sameboy/smoke-dmg.log
+          grep -q 'source: SameBoy DMG, model: DMG' build/emulator-sameboy/smoke-dmg.log
           python3 emulator/tests/validate_smoke_ppm.py \
-            build/emulator-sameboy/smoke.ppm
+            build/emulator-sameboy/smoke-dmg.ppm
+
+      - name: Execute smoke ROM through SameBoy SGB ICD and alternate video path
+        run: |
+          ./build/emulator-sameboy/gbcrt_emu \
+            --source-model sgb \
+            --rom build/emulator-smoke/gbcrt_smoke.gb \
+            --boot build/emulator-smoke/gbcrt_boot_stub.bin \
+            --clock sync \
+            --frames 12 \
+            --out build/emulator-sameboy/smoke-sgb.ppm \
+            | tee build/emulator-sameboy/smoke-sgb.log
+          grep -q 'source: SameBoy SGB ICD, model: SGB' build/emulator-sameboy/smoke-sgb.log
+          python3 emulator/tests/validate_smoke_ppm.py \
+            build/emulator-sameboy/smoke-sgb.ppm
