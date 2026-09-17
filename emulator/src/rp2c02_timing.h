@@ -36,4 +36,11 @@ void rp2c02_timing_reset(rp2c02_timing_t *timing);
  */
 unsigned rp2c02_timing_step(rp2c02_timing_t *timing);
 
+/* In the project's write-only host model PPUSTATUS is never read, so the
+ * VBlank flag remains set from scanline 241 dot 1 until pre-render dot 1.
+ * /INT is open-drain active-low on hardware; this helper returns the logical
+ * asserted state, not the electrical pin level. */
+bool rp2c02_timing_nmi_asserted(const rp2c02_timing_t *timing,
+                                 bool nmi_enabled);
+
 #endif
