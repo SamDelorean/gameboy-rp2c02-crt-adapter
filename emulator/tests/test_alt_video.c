@@ -36,9 +36,10 @@ int main(void)
     assert(rgb_equal(out0[100][245], black));
     assert(rgb_equal(out0[100][255], black));
 
-    /* First manual palette must change at least one active-image color. */
-    gbcrt_alt_video_next_palette(&alt);
-    assert(gbcrt_alt_video_palette_mode(&alt) == 1u);
+    /* Manual preset 1 is intentionally the same DMG LCD fallback as AUTO.
+     * Select preset 2 so this regression checks an actually different mapping. */
+    gbcrt_alt_video_set_palette_mode(&alt, 2u);
+    assert(gbcrt_alt_video_palette_mode(&alt) == 2u);
     gbcrt_alt_video_render(&alt, shade, NULL, false, out1);
 
     int changed = 0;
@@ -54,8 +55,9 @@ int main(void)
     }
     assert(changed);
 
-    /* Cycling all modes returns to AUTO/SGB. */
-    for (unsigned i = 1; i < adapter_palette_count() + 1u; ++i) {
+    /* Cycling from the current mode through the remaining modes returns to AUTO/SGB. */
+    const unsigned total_modes = adapter_palette_count() + 1u;
+    for (unsigned i = 0; i < total_modes - 2u; ++i) {
         gbcrt_alt_video_next_palette(&alt);
     }
     assert(gbcrt_alt_video_palette_mode(&alt) == 0u);

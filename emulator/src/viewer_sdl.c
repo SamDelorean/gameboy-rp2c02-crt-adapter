@@ -110,6 +110,40 @@ static void request_next_palette(unsigned palette_mode, int *palette_pending)
         (int)((palette_mode + 1u) % (adapter_palette_count() + 1u));
 }
 
+static void copy_palette_codes(const rp2c02_ext_t *ppu, uint8_t codes[4])
+{
+    for (unsigned shade = 0; shade < 4u; ++shade) {
+        codes[shade] = rp2c02_ext_palette_code(ppu, (uint8_t)shade);
+    }
+}
+
+static void apply_editor_palette(rp2c02_ext_t *ppu,
+                                 comparison_view_state_t *view,
+                                 int *custom_palette_active,
+                                 char *label,
+                                 size_t label_size)
+{
+    adapter_palette_apply_codes(ppu, view->palette_editor_codes);
+    if (custom_palette_active) *custom_palette_active = 1;
+    snprintf(label, label_size,
+             "CUSTOM %02X %02X %02X %02X",
+             view->palette_editor_codes[0],
+             view->palette_editor_codes[1],
+             view->palette_editor_codes[2],
+             view->palette_editor_codes[3]);
+}
+
+static void load_editor_preset(comparison_view_state_t *view,
+                               unsigned preset_index,
+                               uint8_t reset_codes[4])
+{
+    const adapter_palette_preset_t *preset = adapter_palette_get(preset_index);
+    if (!preset) return;
+    memcpy(view->palette_editor_codes, preset->shade_code,
+           sizeof(view->palette_editor_codes));
+    memcpy(reset_codes, preset->shade_code, 4u);
+}
+
 static int mouse_to_canvas(SDL_Window *window,
                            int mouse_x,
                            int mouse_y,
@@ -255,6 +289,9 @@ int main(int argc, char **argv)
     unsigned palette_mode = 0u; /* AUTO/SGB by default, matching hardware policy. */
     int palette_pending = -1;
     uint64_t applied_sgb_sequence = 0u;
+    int custom_palette_active = 0;
+    unsigned editor_preset_index = 0u;
+    uint8_t editor_reset_codes[4] = {0};
     char palette_label[96];
     apply_palette_mode(&ppu,
                        &frame,
@@ -277,6 +314,9 @@ int main(int argc, char **argv)
         .menu_open = 0,
         .menu_selection = (int)clock_mode,
         .paused = 0,
+        .palette_editor_open = 0,
+        .palette_editor_selected_shade = 0u,
+        .palette_editor_codes = {0u, 0u, 0u, 0u},
         .source_name = source.ops && source.ops->name ? source.ops->name : "source",
         .palette_name = palette_label,
     };
@@ -298,12 +338,68 @@ int main(int argc, char **argv)
                      event.button.button == SDL_BUTTON_LEFT) {
                 unsigned x = 0;
                 unsigned y = 0;
-                if (mouse_to_canvas(window,
-                                    event.button.x,
-                                    event.button.y,
-                                    &x,
-                                    &y) &&
-                    comparison_palette_button_contains(x, y)) {
+                if (!mouse_to_canvas(window,
+                                     event.button.x,
+                                     event.button.y,
+                                     &x,
+                                     &y)) {
+                    continue;
+                }
+
+                if (view.palette_editor_open) {
+                    unsigned shade = 0u;
+                    uint8_t code = 0u;
+                    if (comparison_palette_editor_shade_at(x, y, &shade)) {
+                        view.palette_editor_selected_shade = shade;
+                    }
+                    else if (comparison_palette_editor_code_at(x, y, &code)) {
+                        view.palette_editor_codes[view.palette_editor_selected_shade & 3u] = code;
+                        apply_editor_palette(&ppu, &view, &custom_palette_active,
+                                             palette_label, sizeof(palette_label));
+                    }
+                    else {
+                        const comparison_palette_editor_action_t action =
+                            comparison_palette_editor_action_at(x, y);
+                        if (action == COMPARISON_EDITOR_ACTION_REVERSE) {
+                            uint8_t t = view.palette_editor_codes[0];
+                            view.palette_editor_codes[0] = view.palette_editor_codes[3];
+                            view.palette_editor_codes[3] = t;
+                            t = view.palette_editor_codes[1];
+                            view.palette_editor_codes[1] = view.palette_editor_codes[2];
+                            view.palette_editor_codes[2] = t;
+                            apply_editor_palette(&ppu, &view, &custom_palette_active,
+                                                 palette_label, sizeof(palette_label));
+                        }
+                        else if (action == COMPARISON_EDITOR_ACTION_RESET) {
+                            memcpy(view.palette_editor_codes, editor_reset_codes, 4u);
+                            apply_editor_palette(&ppu, &view, &custom_palette_active,
+                                                 palette_label, sizeof(palette_label));
+                        }
+                        else if (action == COMPARISON_EDITOR_ACTION_PREV ||
+                                 action == COMPARISON_EDITOR_ACTION_NEXT) {
+                            const unsigned count = adapter_palette_count();
+                            if (count) {
+                                if (action == COMPARISON_EDITOR_ACTION_PREV) {
+                                    editor_preset_index =
+                                        (editor_preset_index + count - 1u) % count;
+                                }
+                                else {
+                                    editor_preset_index =
+                                        (editor_preset_index + 1u) % count;
+                                }
+                                load_editor_preset(&view, editor_preset_index,
+                                                   editor_reset_codes);
+                                apply_editor_palette(&ppu, &view, &custom_palette_active,
+                                                     palette_label, sizeof(palette_label));
+                            }
+                        }
+                        else if (action == COMPARISON_EDITOR_ACTION_DONE) {
+                            view.palette_editor_open = 0;
+                        }
+                    }
+                }
+                else if (comparison_palette_button_contains(x, y)) {
+                    custom_palette_active = 0;
                     request_next_palette(palette_mode, &palette_pending);
                 }
             }
@@ -315,9 +411,47 @@ int main(int argc, char **argv)
                 if (key == SDLK_q) {
                     running = 0;
                 }
+                else if (view.palette_editor_open) {
+                    if (key == SDLK_ESCAPE || key == SDLK_e ||
+                        key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+                        view.palette_editor_open = 0;
+                    }
+                    else if (key == SDLK_r) {
+                        uint8_t t = view.palette_editor_codes[0];
+                        view.palette_editor_codes[0] = view.palette_editor_codes[3];
+                        view.palette_editor_codes[3] = t;
+                        t = view.palette_editor_codes[1];
+                        view.palette_editor_codes[1] = view.palette_editor_codes[2];
+                        view.palette_editor_codes[2] = t;
+                        apply_editor_palette(&ppu, &view, &custom_palette_active,
+                                             palette_label, sizeof(palette_label));
+                    }
+                    else if (key >= SDLK_1 && key <= SDLK_4) {
+                        view.palette_editor_selected_shade = (unsigned)(key - SDLK_1);
+                    }
+                    else if (key == SDLK_LEFT) {
+                        view.palette_editor_selected_shade =
+                            (view.palette_editor_selected_shade + 3u) & 3u;
+                    }
+                    else if (key == SDLK_RIGHT) {
+                        view.palette_editor_selected_shade =
+                            (view.palette_editor_selected_shade + 1u) & 3u;
+                    }
+                }
                 else if (key == SDLK_ESCAPE) {
                     if (view.menu_open) view.menu_open = 0;
                     else running = 0;
+                }
+                else if (key == SDLK_e) {
+                    view.menu_open = 0;
+                    view.palette_editor_open = 1;
+                    view.palette_editor_selected_shade = 0u;
+                    copy_palette_codes(&ppu, view.palette_editor_codes);
+                    memcpy(editor_reset_codes, view.palette_editor_codes, 4u);
+                    editor_preset_index = palette_mode ? palette_mode - 1u : 0u;
+                    apply_editor_palette(&ppu, &view, &custom_palette_active,
+                                         palette_label, sizeof(palette_label));
+                    release_all_game_keys(&source);
                 }
                 else if (key == SDLK_SPACE) {
                     view.paused = !view.paused;
@@ -334,6 +468,7 @@ int main(int argc, char **argv)
                     apply_clock_mode(&scheduler, &view, next);
                 }
                 else if (key == SDLK_p) {
+                    custom_palette_active = 0;
                     request_next_palette(palette_mode, &palette_pending);
                 }
                 else if (view.menu_open &&
@@ -358,7 +493,8 @@ int main(int argc, char **argv)
                     }
                 }
             }
-            else if (event.type == SDL_KEYUP) {
+            else if (event.type == SDL_KEYUP &&
+                     !view.palette_editor_open && !view.menu_open) {
                 gb_source_key_t game_key;
                 if (game_key_from_sdl(event.key.keysym.sym, &game_key)) {
                     (void)gb_source_set_key(&source, game_key, 0);
@@ -387,6 +523,7 @@ int main(int argc, char **argv)
         if (palette_pending >= 0) {
             palette_mode = (unsigned)palette_pending;
             palette_pending = -1;
+            custom_palette_active = 0;
             apply_palette_mode(&ppu,
                                &frame,
                                palette_mode,
@@ -394,7 +531,7 @@ int main(int argc, char **argv)
                                palette_label,
                                sizeof(palette_label));
         }
-        else if (palette_mode == 0u &&
+        else if (!custom_palette_active && palette_mode == 0u &&
                  frame.sgb_palette_valid &&
                  frame.sgb_palette_sequence != applied_sgb_sequence) {
             apply_palette_mode(&ppu,

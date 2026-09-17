@@ -28,7 +28,7 @@ RP2350 / Raspberry Pi Pico 2
         | escalado aspect-correct
         | 160x144 -> 234x240
         | 11 negro + imagen + 11 negro
-        | paletas + SGB-lite opcional
+        | traducción de paleta SGB
         v
 EXT0..EXT3
         |
@@ -47,7 +47,6 @@ video compuesto NTSC
 - **Arduino IDE + Arduino-Pico** seleccionado como entorno práctico de desarrollo V1.
 - Captura directa de `LD0`, `LD1`, `CP`, `CPL`, `ST` y `S`.
 - El firmware V0.2 ya contiene la implementación teórica de captura PIO + DMA; falta validarla en banco.
-- `P14/P15` opcionales para escucha pasiva de comandos de paleta Super Game Boy.
 - Dos framebuffers completos de 160x144x2 bits: 11,520 bytes en total.
 - Escalado vertical fijo de 144 a 240 mediante repetición `5/3`.
 - Escalado horizontal fijo de 160 a 234 mediante repetición entera determinista: cada píxel fuente se emite una o dos veces.
@@ -76,7 +75,7 @@ La decisión de V1 queda fijada en **RP2350**, usando **Raspberry Pi Pico 2** co
 
 La razón principal es reducir electrónica adicional: mantiene PIO + DMA y los GPIO digitales actuales del RP2350 son tolerantes a 5 V cuando el chip está correctamente alimentado. Esto permite recibir directamente las señales LCD de 5 V del Game Boy en los GPIO adecuados, evitando el bloque general de adaptación de nivel que exigiría un RP2040.
 
-Con la interfaz PPU optimizada se usan **21 GPIO para DMG** y **23 GPIO incluyendo P14/P15**, dentro de los 26 GPIO expuestos por Pico 2 y sin shift-registers ni expansores de GPIO.
+El estudio previo de interfaz directa con Pico 2/RP2350 se conserva como documentación histórica de prototipo, pero no forma parte del contrato actual del emulador.
 
 Los GPIO ADC `26..28` se reservan para señales de 3.3 V/diagnóstico y no para entradas de 5 V.
 
@@ -97,7 +96,7 @@ Queda pendiente antes de poder llamarlo firmware validado:
 
 - medir y ajustar la captura en un DMG/SGB real;
 - implementar y validar la salida `EXT0..EXT3` mediante PIO + DMA;
-- implementar el decodificador SGB-lite opcional;
+- mantener la traducción global de paleta SGB ya interpretada por SameBoy;
 - cerrar la tabla final de paletas curadas.
 
 Ver [`firmware/README.md`](firmware/README.md) y [`firmware/capture-engine.md`](firmware/capture-engine.md).
@@ -108,21 +107,14 @@ Los cuatro tonos del Game Boy se mapean globalmente a cuatro colores de la PPU. 
 
 La versión 1 contempla:
 
-- un conjunto pequeño de paletas manuales curadas;
+- un catálogo candidato de 16 paletas manuales;
 - selección mediante un único botón;
-- recepción opcional de paletas SGB si existe tráfico compatible en `P14/P15`;
+- uso opcional de paletas SGB en el banco virtual a partir del estado ya interpretado por SameBoy;
 - prioridad permanente del usuario: cualquier paleta SGB puede ser reemplazada con una pulsación del botón.
 
-## SGB-lite opcional
+## Paletas SGB en el banco virtual
 
-Si se conectan `P14/P15`, el firmware podrá intentar decodificar inicialmente sólo:
-
-- `PAL01`
-- `PAL23`
-- `PAL03`
-- `PAL12`
-
-La función es opcional y no garantiza que todos los juegos SGB transmitan comandos en cualquier configuración de Game Boy.
+SameBoy interpreta el protocolo SGB. El código propio recibe únicamente una paleta RGB555 global de cuatro colores, la traduce a códigos RP2C02 y la aplica en `AUTO/SGB`. El emulador actual no implementa un decodificador propio de P14/P15/JOYP, atributos regionales ni bordes gráficos SGB.
 
 ## Clones de PPU
 

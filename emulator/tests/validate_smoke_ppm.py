@@ -46,6 +46,11 @@ def sampled_colors(
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("ppm", type=Path)
+    parser.add_argument(
+        "--allow-uniform-left",
+        action="store_true",
+        help="allow SameBoy reference to be uniform (used by SGB HLE smoke tests)",
+    )
     args = parser.parse_args()
 
     pixels = read_ppm(args.ppm)
@@ -60,7 +65,7 @@ def main() -> None:
     # border, survived the alternate-output path.
     right_image = sampled_colors(pixels, 699 + 22, 132, 234 * 2, 240 * 2, 5)
 
-    if len(left) < 2:
+    if len(left) < 2 and not args.allow_uniform_left:
         raise SystemExit(f"SameBoy reference region is uniform: {left}")
     if len(right_image) < 2:
         raise SystemExit(
@@ -78,7 +83,8 @@ def main() -> None:
 
     print(
         "smoke PPM OK: "
-        f"SameBoy reference has {len(left)} sampled colors; "
+        f"SameBoy reference has {len(left)} sampled colors"
+        f"{' (allowed for SGB HLE)' if len(left) < 2 else ''}; "
         f"RP2C02 image has {len(right_image)} sampled colors; "
         "dedicated side borders are black"
     )

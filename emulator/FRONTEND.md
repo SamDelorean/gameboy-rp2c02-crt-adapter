@@ -93,7 +93,7 @@ RP2C02 EXT model
 
 The black box represents only the behavior required to study the alternate video output. It must not become an emulator of the planned RP2350/Arduino implementation.
 
-For SGB, reuse SameBoy's existing SGB implementation and consume effective palette state directly. The standalone `sgb_lite` packet decoder is retained only as a future hardware/firmware validation asset for the documented physical P14/P15 implementation.
+For SGB, reuse SameBoy's existing SGB implementation and consume effective palette state directly. There is no project-owned P14/P15/JOYP transport decoder in the virtual bench; project code only translates the already-decoded four-color RGB555 palette to RP2C02 codes.
 
 ## Existing standalone frontend
 

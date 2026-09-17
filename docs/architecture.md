@@ -59,10 +59,7 @@ Common Game Boy video/timing signals presently expected:
 
 Optional SGB-specific signaling taps:
 
-- `P14`
-- `P15`
-
-The six video/timing signals form the baseline image-source interface. `P14/P15` are optional and exist only to add SGB-lite behavior when accessible.
+The six video/timing signals form the baseline image-source interface. SGB palette handling is not a physical input requirement in the current virtual bench; SameBoy supplies already-decoded palette state.
 
 The exact polarity, active window, sampling edge, voltage levels and loading requirements must be verified on real hardware for each supported source configuration before the schematic is frozen.
 
@@ -165,9 +162,9 @@ The project intends the same core video pipeline to work with an SGB/SGB-CPU-com
 
 This must be validated experimentally. The repository should document every tested SGB hardware/configuration rather than imply universal drop-in electrical equivalence.
 
-### Optional SGB-lite palette signaling
+### SGB palette handling in the virtual bench
 
-If `P14/P15` are connected, the controller may passively decode a limited subset of direct Super Game Boy palette commands.
+SameBoy owns SGB protocol interpretation. The project bridge receives only an already-decoded global four-color RGB555 palette and translates it to RP2C02 codes. No project-owned P14/P15/JOYP transport decoder is part of the current architecture.
 
 This optional layer must never be required for:
 

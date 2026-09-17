@@ -3,7 +3,7 @@
 
 The files produced by this script contain no Nintendo boot ROM or commercial
 software. They exist only to make the SameBoy-backed alternate-video path and
-passive SGB-lite listener executable in CI.
+SameBoy SGB HLE path executable in CI.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ def emit_sgb_packet(code: bytearray, packet: bytes) -> None:
     if len(packet) != 16:
         raise ValueError("SGB packet must be exactly 16 bytes")
 
-    # Passive-listener test sequence matching the SGB P14/P15 serial protocol:
+    # SGB packet sequence consumed by SameBoy HLE; project code does not decode P14/P15 transport:
     # 11->00 reset/start, then 128 LSB-first bits each armed by 11, then a
     # zero-valued stop pulse. SameBoy generates the JOYP callback from these
     # actual CPU writes; the adapter does not receive the packet out of band.
@@ -61,7 +61,7 @@ def make_pal01_packet() -> bytes:
     packet = bytearray(16)
     packet[0] = 0x01  # PAL01 command ID 0, one packet
 
-    # First palette is the global V1 SGB-lite palette. Use deliberately obvious
+    # First palette is the global four-color SGB test palette. Use deliberately obvious
     # RGB555 values so CI can distinguish automatic colorization from fallback.
     put_le16(packet, 1, 0x7FFF)  # common color 0: white
     put_le16(packet, 3, 0x001F)  # palette 0 color 1: red
@@ -109,7 +109,7 @@ def make_rom() -> bytes:
 
     # Send one genuine direct-palette command. In DMG mode these JOYP writes are
     # harmless; in SameBoy's SGB NO_SFC mode they leave through the official
-    # external JOYP callback and are decoded by our passive SGB-lite module.
+    # SameBoy HLE. Project code receives only SameBoy's resulting palette state.
     emit_sgb_packet(code, make_pal01_packet())
 
     code += bytes((0x3E, 0xE4))              # LD A,$E4

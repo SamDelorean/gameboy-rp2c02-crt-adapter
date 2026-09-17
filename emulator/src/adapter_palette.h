@@ -10,6 +10,7 @@ typedef struct {
     uint8_t shade_code[4];
 } adapter_palette_preset_t;
 
+/* Candidate manual catalog currently contains 16 entries; AUTO/SGB is separate. */
 unsigned adapter_palette_count(void);
 const adapter_palette_preset_t *adapter_palette_get(unsigned index);
 
@@ -19,6 +20,10 @@ const adapter_palette_preset_t *adapter_palette_get(unsigned index);
  * with canonical RP2C02 black ($0F).
  */
 void adapter_palette_apply(rp2c02_ext_t *ppu, unsigned index);
+
+/* Apply an arbitrary four-shade mapping, used by the virtual-bench editor. */
+void adapter_palette_apply_codes(rp2c02_ext_t *ppu,
+                                 const uint8_t shade_code[4]);
 
 /*
  * Provisional virtual-bench conversion for SGB RGB555 colors. It compares the

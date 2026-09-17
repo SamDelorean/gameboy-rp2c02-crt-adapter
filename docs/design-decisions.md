@@ -77,9 +77,9 @@ LD0 LD1 CP CPL ST S GND
 
 Exact sampling edge, voltage and loading remain bench-validated quantities.
 
-### OPTIONAL — P14/P15 for SGB-lite
+### SUPERSEDED — Physical P14/P15 SGB listener
 
-`P14/P15` are passive optional inputs for direct SGB palette-command listening. Their absence must not affect normal video or manual palettes.
+The earlier optional P14/P15 listener proposal is not part of the current virtual-bench architecture. SameBoy supplies already-decoded SGB palette state; project code only performs the four-color RGB555-to-RP2C02 translation.
 
 ### SET — SGB external clock replacement is an established design principle
 
@@ -197,23 +197,11 @@ Reasons:
 
 Use 5 V source inputs only on the RP2350/Pico 2 fault-tolerant digital GPIO group; ADC-capable GPIO26..28 are reserved for 3.3 V-only diagnostics/future functions.
 
-### SET — Arduino IDE + Arduino-Pico is the V1 firmware environment
+### SUPERSEDED — Arduino implementation is not part of the current architecture
 
-The first firmware implementation uses **Arduino IDE with the Earle Philhower Arduino-Pico core**, targeting **Raspberry Pi Pico 2 / RP2350 in ARM mode**.
+The earlier Arduino-Pico/RP2350 sketch is retained only as historical prototype work. It is **not** part of the current emulator architecture and must not be treated as a requirement for SGB palette handling or for virtual-bench validation.
 
-This choice is made for practical build/upload/debug workflow, not to replace deterministic hardware timing with Arduino abstractions.
-
-The Arduino-Pico core is built on the Raspberry Pi Pico SDK and permits direct use of native RP2350 hardware APIs. Therefore:
-
-- low-rate setup, user interface, palette control and diagnostics may use ordinary Arduino APIs where convenient;
-- pixel-rate Game Boy capture and `EXT0..EXT3` output must use PIO + DMA or equivalent native hardware assistance;
-- ordinary `digitalWrite()`/interrupt bit-banging is not permitted for the final pixel pipeline.
-
-Canonical first sketch:
-
-```text
-firmware/arduino/GameBoyRP2C02CRT/GameBoyRP2C02CRT.ino
-```
+The current virtual bridge is intentionally implementation-agnostic. A future physical realization may use RP2350 or a different/discrete implementation without changing the emulator contract.
 
 ### SET — Hardware-assisted deterministic pixel I/O
 
@@ -338,13 +326,9 @@ Current target: 8 or 16 curated palettes.
 
 SGB-compatible source hardware should use the same capture/buffer/scaler/output architecture once equivalent source signals are accessed.
 
-### OPTIONAL — Passive SGB-lite commands
+### SUPERSEDED — Project-owned SGB packet decoding
 
-Initial direct commands:
-
-```text
-PAL01 PAL23 PAL03 PAL12
-```
+The project no longer implements SGB packet transport in its own emulator code. SameBoy owns PAL command interpretation. The project consumes only the resulting global four-color palette and deliberately ignores regional attributes and graphical borders.
 
 ### REJECTED FOR V1 — Full SGB emulation
 
@@ -425,7 +409,7 @@ The physical implementation may later change from RP2350 to discrete/period logi
 
 For virtual SGB operation, reuse SameBoy's SGB implementation and consume its effective palette state. Do not emulate P14/P15/JOYP transport in the main desktop video path.
 
-The project's signal-level SGB decoder remains only a hardware/firmware validation asset for the optional physical SGB-lite implementation.
+No project-owned P14/P15/JOYP decoder is part of the current SGB path. SameBoy supplies the already-decoded global palette; project code only performs RGB555-to-RP2C02 translation.
 
 ### SET — One virtual palette control mirrors the hardware UI
 

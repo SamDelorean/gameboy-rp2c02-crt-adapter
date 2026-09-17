@@ -1,3 +1,7 @@
+# Historical Arduino/RP2350 Prototype
+
+> **Status:** retained for reference only. The current project architecture does not depend on Arduino/RP2350 firmware, and current SGB palette handling exists only in the virtual bench using palette state already decoded by SameBoy.
+
 # Firmware
 
 The source implementation is based on **Arduino IDE + Arduino-Pico** targeting **Raspberry Pi Pico 2 / RP2350**.
@@ -118,13 +122,13 @@ front framebuffer
 
 That engine will replace the current static EXT test value. It must be tied to measured/validated RP2C02 raster timing rather than implemented with `digitalWrite()` at pixel rate.
 
-SGB `P14/P15` palette-command decoding remains a later optional module.
+The former SGB `P14/P15` listener TODO is historical and is not part of the current project scope. SameBoy supplies SGB palette state in the virtual bench.
 
 ## Compatibility target
 
 Firmware uses a common **Game Boy DMG / SGB** source pipeline. Once a valid 160x144x2-bit frame is reconstructed, buffering, scaling, border generation, palette mapping and RP2C02 EXT output are common to both source families.
 
-SGB-specific `P14/P15` packet decoding remains separate and optional.
+SGB-specific `P14/P15` packet decoding is not part of the current implementation; the retained firmware tree is reference material only.
 
 ## Constraints
 

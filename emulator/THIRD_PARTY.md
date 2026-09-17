@@ -26,6 +26,31 @@ SameBoy is **not vendored** into this repository. `emulator/scripts/bootstrap_sa
 
 The local adapter in `emulator/src/gb_source_sameboy.c` is project code written against SameBoy's public library API.
 
+## johnmph/NESEmu RP2C02 donor
+
+Repository: https://github.com/johnmph/NESEmu
+
+Pinned integration commit:
+
+```text
+4966aa09259ef965d4b6bd2635a1dfe57a8569cb
+```
+
+Current role:
+
+- optional donor implementation of the **Ricoh 2C02 PPU only** for the right-hand preview path;
+- receives the project's already-scaled `EXT0..EXT3` nibble stream through NESEmu's public `exts(uint8_t)` entry point;
+- receives the project's palette/register state through normal PPU register writes;
+- returns native six-bit RP2C02 color codes through its `plotPixel()` graphics callback;
+- does **not** bring in the 6502 CPU, APU, NES cartridge/mappers, CHR/game rendering, or NESEmu's frontend;
+- does **not** synthesize analog NTSC/VOUT; desktop RGB conversion remains a simple preview LUT after the PPU color code is produced.
+
+The wrapper is `emulator/src/rp2c02_nesemu.cpp` and exposes a small C ABI so the rest of the emulator remains C. The dependency-free reduced `rp2c02_ext`/timing path remains available as a regression oracle and fallback build.
+
+NESEmu is **not vendored** into this repository. `emulator/scripts/bootstrap_nesemu.sh` fetches the pinned commit into the ignored `emulator/third_party/NESEmu` directory. The integration compiles the donor PPU templates and NESEmu's small `Common.cpp` helper only.
+
+Licensing note: the pinned NESEmu repository is MIT licensed. The upstream copyright and license notice must be retained when redistributing builds or copied source that includes NESEmu code.
+
 ## Pinky / Visual2C02 tests
 
 Repository: https://github.com/koute/pinky

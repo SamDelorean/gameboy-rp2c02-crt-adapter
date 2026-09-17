@@ -7,6 +7,8 @@ set(CMAKE_C_EXTENSIONS OFF)
 
 option(GBCRT_ENABLE_SAMEBOY "Build the optional SameBoy-backed ROM source" OFF)
 option(GBCRT_ENABLE_SDL2 "Build the optional live SDL2 comparison viewer" OFF)
+option(GBCRT_ENABLE_NESEMU_PPU "Use pinned johnmph/NESEmu Ricoh2C02 for the preview PPU" OFF)
+set(NESEMU_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/NESEmu" CACHE PATH "Path to the pinned johnmph/NESEmu checkout")
 set(SAMEBOY_ROOT "" CACHE PATH "Path to a SameBoy checkout with build/lib/libsameboy.a")
 
 add_library(gbcrt_core
@@ -14,7 +16,6 @@ add_library(gbcrt_core
     src/bridge.c
     src/clock_mode.c
     src/source_model.c
-    src/sgb_lite.c
     src/rp2c02_ext.c
     src/rp2c02_timing.c
     src/gbcrt_alt_video.c
@@ -26,6 +27,24 @@ add_library(gbcrt_core
     src/ppm.c
 )
 target_include_directories(gbcrt_core PUBLIC src)
+
+if(GBCRT_ENABLE_NESEMU_PPU)
+    enable_language(CXX)
+    set(CMAKE_CXX_STANDARD 11)
+    set(CMAKE_CXX_STANDARD_REQUIRED ON)
+    set(CMAKE_CXX_EXTENSIONS OFF)
+
+    if(NOT EXISTS "${NESEMU_ROOT}/Source/NESEmu/Ppu.hpp")
+        message(FATAL_ERROR
+            "Pinned NESEmu PPU not found under ${NESEMU_ROOT}. Run emulator/scripts/bootstrap_nesemu.sh first or set -DNESEMU_ROOT=/path/to/NESEmu.")
+    endif()
+
+    target_sources(gbcrt_core PRIVATE
+        src/rp2c02_nesemu.cpp
+        "${NESEMU_ROOT}/Source/NESEmu/Common.cpp")
+    target_include_directories(gbcrt_core PRIVATE "${NESEMU_ROOT}/Source")
+    target_compile_definitions(gbcrt_core PUBLIC GBCRT_ENABLE_NESEMU_PPU=1)
+endif()
 
 if(GBCRT_ENABLE_SAMEBOY)
     if(NOT SAMEBOY_ROOT)
@@ -82,6 +101,14 @@ endif()
 
 include(CTest)
 if(BUILD_TESTING)
+    # The regression suite intentionally uses assert(). Keep those checks live
+    # even when a CI/configuration build selects Release and defines NDEBUG.
+    if(MSVC)
+        add_compile_options(/UNDEBUG)
+    else()
+        add_compile_options(-UNDEBUG)
+    endif()
+
     add_executable(test_bridge tests/test_bridge.c)
     target_link_libraries(test_bridge PRIVATE gbcrt_core)
     add_test(NAME bridge_geometry COMMAND test_bridge)
@@ -93,13 +120,6 @@ if(BUILD_TESTING)
     add_executable(test_source tests/test_source.c)
     target_link_libraries(test_source PRIVATE gbcrt_core)
     add_test(NAME source_abstraction COMMAND test_source)
-
-    # Signal-level SGB packet decoder is retained only as a future hardware /
-    # firmware validation asset. The main virtual-bench path consumes SameBoy's
-    # already-decoded SGB state directly.
-    add_executable(test_sgb_lite tests/test_sgb_lite.c)
-    target_link_libraries(test_sgb_lite PRIVATE gbcrt_core)
-    add_test(NAME sgb_lite_packet_decoder COMMAND test_sgb_lite)
 
     add_executable(test_rp2c02_ext tests/test_rp2c02_ext.c)
     target_link_libraries(test_rp2c02_ext PRIVATE gbcrt_core)
@@ -116,4 +136,14 @@ if(BUILD_TESTING)
     add_executable(test_clock_mode tests/test_clock_mode.c)
     target_link_libraries(test_clock_mode PRIVATE gbcrt_core)
     add_test(NAME clock_mode COMMAND test_clock_mode)
+
+    add_executable(test_palette_editor tests/test_palette_editor.c)
+    target_link_libraries(test_palette_editor PRIVATE gbcrt_core)
+    add_test(NAME palette_editor_hitboxes COMMAND test_palette_editor)
+
+    if(GBCRT_ENABLE_NESEMU_PPU)
+        add_executable(test_rp2c02_nesemu tests/test_rp2c02_nesemu.c)
+        target_link_libraries(test_rp2c02_nesemu PRIVATE gbcrt_core)
+        add_test(NAME rp2c02_nesemu_ext_path COMMAND test_rp2c02_nesemu)
+    endif()
 endif()

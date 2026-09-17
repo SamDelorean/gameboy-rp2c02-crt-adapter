@@ -8,12 +8,7 @@ The V1 controller choice is **closed**: **RP2350**, with **Raspberry Pi Pico 2**
 
 The earlier RP2040/Pico candidate is retained only as historical comparison in `controller-selection.md`; it is not an open project choice.
 
-Current controller-dependent baseline:
-
-- Arduino IDE + Arduino-Pico development environment;
-- RP2350 PIO + DMA for timing-critical capture/output;
-- 21 GPIO for the DMG baseline and 23 GPIO with optional `P14/P15`;
-- direct minimized write-only PPU interface with no shift-register/latch baseline.
+Historical prototype work exists for RP2350/Pico 2, but the current virtual-bench architecture is independent of Arduino/RP2350 implementation details. Physical realization is deferred and may be revisited without changing the emulator contract.
 
 See [`controller-selection.md`](controller-selection.md), [`design-decisions.md`](design-decisions.md), and [`../firmware/README.md`](../firmware/README.md).
 
@@ -74,28 +69,26 @@ Maintain a test-based compatibility matrix. Candidate families are not automatic
 
 ## 6. Palette table
 
-Open points:
+The virtual bench now implements a **16-preset candidate catalog** with exact RP2C02 codes and excludes `$0D`. Preset count is provisionally closed at 16.
 
-- 8 versus 16 initial presets,
-- exact color-code choices,
-- measured/modelled PPU palette basis,
-- RGB555 conversion method,
-- handling of unsafe/problematic PPU color codes.
+Still open before hardware freeze:
 
-## 7. SGB-lite behavior
+- visual review/replacement/reordering of individual presets across representative DMG software;
+- measured/modelled RP2C02 palette basis for color-translation work;
+- final RGB555-to-RP2C02 quantization metric.
 
-Initial scope is limited to passive direct-palette commands on optional `P14/P15`.
+## 7. SGB palette handling
 
-Open validation points include:
+For the current virtual bench this is closed at a deliberately small scope: SameBoy interprets SGB protocol state and project code accepts only the resulting global four-color RGB555 palette. The project translates those four colors to RP2C02 codes.
 
-- which real games/configurations emit usable packets passively,
-- exact packet-decoder timing tolerances,
-- RGB555-to-RP2C02 quantization details,
-- fallback palette behavior.
+Still open:
 
-Active SGB identification emulation remains explicitly deferred unless later justified.
+- final/measured RP2C02 palette basis for RGB555 quantization;
+- final quantization metric.
 
-SGB video-path compatibility does not depend on closing every SGB-lite question.
+The `AUTO/SGB` fallback is now preset 1, `DMG LCD` (`$38/$28/$18/$08`).
+
+Physical `P14/P15` transport and a project-owned SGB packet decoder are outside the current emulator scope.
 
 ## 8. Border behavior beyond version 1
 
