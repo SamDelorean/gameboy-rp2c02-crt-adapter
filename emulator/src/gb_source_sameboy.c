@@ -67,6 +67,28 @@ static int sameboy_next_frame(gb_source_t *source, gb_source_frame_t *frame)
     return 0;
 }
 
+static int sameboy_set_key(gb_source_t *source,
+                           gb_source_key_t key,
+                           int pressed)
+{
+    sameboy_ctx_t *ctx = source->ctx;
+    if (!ctx || !ctx->gb || key < 0 || key >= GB_SOURCE_KEY_COUNT) return -1;
+
+    static const GB_key_t map[GB_SOURCE_KEY_COUNT] = {
+        [GB_SOURCE_KEY_RIGHT]  = GB_KEY_RIGHT,
+        [GB_SOURCE_KEY_LEFT]   = GB_KEY_LEFT,
+        [GB_SOURCE_KEY_UP]     = GB_KEY_UP,
+        [GB_SOURCE_KEY_DOWN]   = GB_KEY_DOWN,
+        [GB_SOURCE_KEY_A]      = GB_KEY_A,
+        [GB_SOURCE_KEY_B]      = GB_KEY_B,
+        [GB_SOURCE_KEY_SELECT] = GB_KEY_SELECT,
+        [GB_SOURCE_KEY_START]  = GB_KEY_START,
+    };
+
+    GB_set_key_state(ctx->gb, map[key], pressed != 0);
+    return 0;
+}
+
 static void sameboy_destroy(gb_source_t *source)
 {
     sameboy_ctx_t *ctx = source->ctx;
@@ -81,6 +103,7 @@ static void sameboy_destroy(gb_source_t *source)
 static const gb_source_ops_t sameboy_ops = {
     .name = "SameBoy",
     .next_frame = sameboy_next_frame,
+    .set_key = sameboy_set_key,
     .destroy = sameboy_destroy,
 };
 
@@ -103,6 +126,7 @@ int gb_source_sameboy_create(gb_source_t *source,
     GB_set_pixels_output(ctx->gb, ctx->screen);
     GB_set_rgb_encode_callback(ctx->gb, encode_rgb);
     GB_set_palette(ctx->gb, &GB_PALETTE_DMG);
+    GB_set_emulate_joypad_bouncing(ctx->gb, false);
 
     if (GB_load_rom(ctx->gb, rom_path) != 0 ||
         GB_load_boot_rom(ctx->gb, boot_rom_path) != 0) {
