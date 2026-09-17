@@ -52,6 +52,12 @@ void rp2c02_ext_cpu_write(rp2c02_ext_t *ppu, uint8_t reg, uint8_t value)
     switch (reg & 7u) {
     case RP2C02_REG_CTRL:
         ppu->ctrl = value;
+        /* PPUCTRL nametable bits also update t[10:11]. The project normally
+           writes zero here, but tracking this costs nothing and keeps the
+           reduced address latch faithful to the real write path. */
+        ppu->vram_temp_address =
+            (uint16_t)((ppu->vram_temp_address & ~0x0c00u) |
+                       ((uint16_t)(value & 0x03u) << 10));
         break;
 
     case RP2C02_REG_MASK:
@@ -60,14 +66,19 @@ void rp2c02_ext_cpu_write(rp2c02_ext_t *ppu, uint8_t reg, uint8_t value)
 
     case RP2C02_REG_ADDR:
         if (ppu->ppuaddr_high_next) {
-            ppu->vram_address =
-                (uint16_t)((ppu->vram_address & 0x00ffu) |
+            /* First $2006 write updates temporary t only. It does not alter v,
+               so it cannot by itself trigger the rendering-disabled palette
+               address override. */
+            ppu->vram_temp_address =
+                (uint16_t)((ppu->vram_temp_address & 0x00ffu) |
                            ((uint16_t)(value & 0x3fu) << 8));
             ppu->ppuaddr_high_next = false;
         }
         else {
-            ppu->vram_address =
-                (uint16_t)((ppu->vram_address & 0x3f00u) | value);
+            /* Second write completes t and copies t -> v. */
+            ppu->vram_temp_address =
+                (uint16_t)((ppu->vram_temp_address & 0x3f00u) | value);
+            ppu->vram_address = ppu->vram_temp_address & 0x3fffu;
             ppu->ppuaddr_high_next = true;
         }
         break;
