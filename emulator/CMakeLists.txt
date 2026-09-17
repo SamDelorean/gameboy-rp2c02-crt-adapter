@@ -11,15 +11,21 @@ set(SAMEBOY_ROOT "" CACHE PATH "Path to a SameBoy checkout built with 'make lib'
 
 add_library(gbcrt_core
     src/bridge.c
+    src/clock_mode.c
     src/rp2c02_ext.c
     src/rp2c02_timing.c
     src/pattern_source.c
     src/gb_source.c
     src/gb_source_pattern.c
     src/comparison_render.c
+    src/ui_font.c
     src/ppm.c
 )
 target_include_directories(gbcrt_core PUBLIC src)
+
+if(UNIX)
+    target_link_libraries(gbcrt_core PUBLIC m)
+endif()
 
 if(GBCRT_ENABLE_SAMEBOY)
     if(NOT SAMEBOY_ROOT)
@@ -49,10 +55,6 @@ if(GBCRT_ENABLE_SAMEBOY)
     target_sources(gbcrt_core PRIVATE src/gb_source_sameboy.c)
     target_compile_definitions(gbcrt_core PUBLIC GBCRT_ENABLE_SAMEBOY=1)
     target_link_libraries(gbcrt_core PUBLIC SameBoy::Core)
-
-    if(UNIX)
-        target_link_libraries(gbcrt_core PUBLIC m)
-    endif()
 endif()
 
 add_executable(gbcrt_emu src/main.c)
@@ -79,4 +81,8 @@ if(BUILD_TESTING)
     add_executable(test_rp2c02_timing tests/test_rp2c02_timing.c)
     target_link_libraries(test_rp2c02_timing PRIVATE gbcrt_core)
     add_test(NAME rp2c02_timing COMMAND test_rp2c02_timing)
+
+    add_executable(test_clock_mode tests/test_clock_mode.c)
+    target_link_libraries(test_clock_mode PRIVATE gbcrt_core)
+    add_test(NAME clock_mode COMMAND test_clock_mode)
 endif()
