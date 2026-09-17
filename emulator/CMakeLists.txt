@@ -14,6 +14,7 @@ add_library(gbcrt_core
     src/bridge.c
     src/clock_mode.c
     src/source_model.c
+    src/sgb_lite.c
     src/rp2c02_ext.c
     src/rp2c02_timing.c
     src/pattern_source.c
@@ -86,6 +87,10 @@ if(BUILD_TESTING)
     add_executable(test_source tests/test_source.c)
     target_link_libraries(test_source PRIVATE gbcrt_core)
     add_test(NAME source_abstraction COMMAND test_source)
+
+    add_executable(test_sgb_lite tests/test_sgb_lite.c)
+    target_link_libraries(test_sgb_lite PRIVATE gbcrt_core)
+    add_test(NAME sgb_lite_packet_decoder COMMAND test_sgb_lite)
 
     add_executable(test_rp2c02_ext tests/test_rp2c02_ext.c)
     target_link_libraries(test_rp2c02_ext PRIVATE gbcrt_core)
