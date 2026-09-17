@@ -2,14 +2,18 @@
 
 This directory is the software validation bench for the Game Boy RP2C02 CRT Adapter.
 
-It intentionally does **not** emulate a complete NES. The target architecture is:
+## SameBoy-first architecture
+
+The virtual bench deliberately reuses **SameBoy as the Game Boy implementation**. We do not intend to build a second Game Boy emulator inside this repository.
+
+SameBoy is the source of truth for Game Boy CPU, memory, cartridge behavior, LCD/PPU behavior, frame timing, joypad and the normal reference image. Project-owned emulator code focuses on the alternate video path:
 
 ```text
-Game Boy source core
+SameBoy Game Boy core
       |
-      | normal reference frame + 2-bit four-shade frame
+      | normal reference frame + final four-shade Game Boy image
       v
-virtual adapter bridge
+project alternate-video bridge
       |
       | 160x144 -> 234x240
       | 11 border + image + 11 border
@@ -21,10 +25,14 @@ reduced RP2C02 EXT model
 comparison frontend
 ```
 
+The project does **not** emulate a complete NES either. The RP2C02 side models only the behavior needed by the proposed hardware adapter.
+
+This division is intentional: if SameBoy already models a piece of Game Boy behavior, prefer using it rather than recreating that behavior locally.
+
 The comparison output is designed around a 1280x720 16:9 canvas with two formally framed video regions:
 
-- left: **GAME BOY REFERENCE**, the normal Game Boy/SameBoy output;
-- right: **RP2C02 EXT PATH**, the same source frame after the project bridge and RP2C02 palette path.
+- left: **GAME BOY REFERENCE**, the normal SameBoy output;
+- right: **RP2C02 EXT PATH**, the same source image after the project bridge and RP2C02 palette/timing path.
 
 The right panel explicitly identifies the `256x240` PPU region and the `11 + 234 + 11` composition so geometry, centering, duplication patterns and palette differences remain visible rather than hidden by the UI.
 
@@ -52,7 +60,7 @@ Implemented now:
 - automated regression tests for bridge geometry, source abstraction/joypad, RP2C02 raster timing and clock scheduling;
 - GitHub Actions build/test coverage for the dependency-free core, SDL2 viewer build and pinned SameBoy link build.
 
-The pinned SameBoy library, our adapter, and the SDL2 viewer all compile in CI. No Game Boy ROM is bundled with the project.
+The pinned SameBoy library, our adapter, and the SDL2 viewer all compile in CI. No commercial Game Boy ROM is bundled with the project.
 
 The RGB LUT in `rp2c02_ext.c` is **only a provisional monitor approximation**. It is not yet a composite NTSC waveform model.
 
@@ -142,7 +150,7 @@ Run a user-supplied ROM and DMG boot ROM:
 
 No commercial ROM or Nintendo boot ROM is stored in this repository.
 
-SameBoy itself contains open boot-ROM source, so a later integration may switch to a reproducibly built SameBoy boot ROM instead of requiring a user-supplied Nintendo image. That remains separate from the first source-adapter step.
+A project-authored/open test ROM and boot stub may be used in CI so the SameBoy-backed path can actually execute Game Boy code without proprietary assets.
 
 ## Optional live SDL2 viewer
 
@@ -194,13 +202,11 @@ All Game Boy keys are released automatically when the SDL window loses focus or 
 
 The window title reports source, clock mode, Game Boy frame number, RP2C02 output-frame count and repeated-output count.
 
-## Why the first SameBoy adapter works at frame level
+## Why the SameBoy adapter works at frame level
 
-For the first ROM-backed comparison we intentionally do not patch SameBoy's pixel pipeline.
+For the primary ROM-backed comparison we intentionally use SameBoy's normal final framebuffer instead of recreating its LCD pipeline.
 
 SameBoy renders the normal 160x144 DMG frame using a fixed DMG palette. The adapter preserves that framebuffer for the **left reference image**, then maps those four known RGB values back to shade indices `0..3` for the project's **right-hand bridge path**.
-
-This provides one Game Boy execution core and one frame source for both views:
 
 ```text
              SameBoy DMG core
@@ -218,9 +224,21 @@ This provides one Game Boy execution core and one frame source for both views:
                               right
 ```
 
-This is sufficient for validating geometry, palette mapping and frame-level behavior.
+This is the intended main software architecture because the project only needs an alternate video output, not another Game Boy emulator.
 
-A later signal-level mode may use or extend SameBoy's SFC/SNES integration callbacks to expose pixel/H-reset/V-reset events directly when we want to compare the theoretical `LD0/LD1/CP/CPL/ST/S` capture model against emulator timing.
+### Optional signal-level diagnostics
+
+Exact `LD0/LD1/CP/CPL/ST/S`-style validation is useful only when checking the eventual physical capture interface. It is **not** a prerequisite for the normal virtual bench.
+
+SameBoy already exposes SFC/SNES integration hooks for pixel, horizontal-reset and vertical-reset events:
+
+```text
+GB_set_icd_pixel_callback()
+GB_set_icd_hreset_callback()
+GB_set_icd_vreset_callback()
+```
+
+If we later need signal-level diagnostics, the preferred approach is to reuse those callbacks or add a very small maintainable SameBoy hook for the DMG path. Reimplementing the Game Boy LCD/PPU state machine in this repository is explicitly out of scope.
 
 ## RP2C02 model policy
 
