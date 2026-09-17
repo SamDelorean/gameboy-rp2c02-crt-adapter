@@ -40,11 +40,13 @@ void gbcrt_clock_scheduler_set_mode(gbcrt_clock_scheduler_t *scheduler,
  * Call once per RP2C02 output frame. The return value is the number of source
  * frames that should be consumed before presenting this output frame:
  *
- *   0 -> repeat the previous Game Boy frame (stock DMG drift)
+ *   0 -> repeat the previous Game Boy frame in STOCK mode
  *   1 -> normal one-to-one advance
- *   2 -> consume two source frames and present the newest one (stock SGB drift)
  *
- * Synchronized mode always returns 1.
+ * SYNC always returns 1. SGB does not have a separate SNES-derived timing
+ * model here: the project assumes its original clock path has already been
+ * isolated and the source is driven by either STOCK Game Boy clock or the
+ * project SYNC clock, exactly like DMG at the system boundary.
  */
 unsigned gbcrt_clock_scheduler_step(gbcrt_clock_scheduler_t *scheduler);
 
