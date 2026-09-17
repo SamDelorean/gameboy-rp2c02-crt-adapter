@@ -4,6 +4,7 @@
 #include "comparison_render.h"
 #include "gb_source.h"
 #include "rp2c02_ext.h"
+#include "source_model.h"
 
 #include <SDL2/SDL.h>
 
@@ -14,9 +15,9 @@
 static void usage(const char *argv0)
 {
     fprintf(stderr,
-            "usage: %s [--clock stock|sync]"
+            "usage: %s [--clock stock|sync] [--source-model dmg|sgb]"
 #ifdef GBCRT_ENABLE_SAMEBOY
-            " [--rom game.gb --boot dmg_boot.bin]"
+            " [--rom game.gb --boot boot.bin]"
 #endif
             "\n",
             argv0);
@@ -37,17 +38,19 @@ static int parse_clock_mode(const char *text, gbcrt_clock_mode_t *mode)
 
 static int create_source(gb_source_t *source,
                          const char *rom,
-                         const char *boot)
+                         const char *boot,
+                         gbcrt_source_model_t source_model)
 {
     if (rom) {
 #ifdef GBCRT_ENABLE_SAMEBOY
         if (!boot) {
-            fprintf(stderr, "--rom currently requires --boot for the SameBoy DMG source\n");
+            fprintf(stderr, "--rom currently requires --boot for the SameBoy source\n");
             return -1;
         }
-        return gb_source_sameboy_create(source, rom, boot);
+        return gb_source_sameboy_create_model(source, rom, boot, source_model);
 #else
         (void)boot;
+        (void)source_model;
         fprintf(stderr,
                 "this build has no SameBoy support; enable GBCRT_ENABLE_SAMEBOY\n");
         return -1;
@@ -55,6 +58,16 @@ static int create_source(gb_source_t *source,
     }
 
     return gb_source_pattern_create(source);
+}
+
+static int advance_source(gb_source_t *source,
+                          gb_source_frame_t *frame,
+                          unsigned count)
+{
+    for (unsigned i = 0; i < count; ++i) {
+        if (gb_source_next_frame(source, frame) != 0) return -1;
+    }
+    return 0;
 }
 
 static void apply_clock_mode(gbcrt_clock_scheduler_t *scheduler,
@@ -95,6 +108,7 @@ int main(int argc, char **argv)
     const char *rom = NULL;
     const char *boot = NULL;
     gbcrt_clock_mode_t clock_mode = GBCRT_CLOCK_SYNC;
+    gbcrt_source_model_t source_model = GBCRT_SOURCE_MODEL_DMG;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--rom") == 0 && i + 1 < argc) {
@@ -109,6 +123,12 @@ int main(int argc, char **argv)
                 return 1;
             }
         }
+        else if (strcmp(argv[i], "--source-model") == 0 && i + 1 < argc) {
+            if (gbcrt_source_model_parse(argv[++i], &source_model) != 0) {
+                usage(argv[0]);
+                return 1;
+            }
+        }
         else {
             usage(argv[0]);
             return 1;
@@ -116,7 +136,7 @@ int main(int argc, char **argv)
     }
 
     gb_source_t source = {0};
-    if (create_source(&source, rom, boot) != 0) {
+    if (create_source(&source, rom, boot, source_model) != 0) {
         fprintf(stderr, "failed to initialize Game Boy source\n");
         return 2;
     }
@@ -184,13 +204,14 @@ int main(int argc, char **argv)
     uint8_t ext[PPU_ACTIVE_H][PPU_ACTIVE_W];
 
     gbcrt_clock_scheduler_t scheduler;
-    gbcrt_clock_scheduler_init(&scheduler, clock_mode);
+    gbcrt_clock_scheduler_init(&scheduler, clock_mode, source_model);
     /* The preloaded source frame is output frame/source frame #1. */
     scheduler.output_frames = 1;
     scheduler.source_frames = 1;
 
     comparison_view_state_t view = {
         .clock_mode = clock_mode,
+        .source_model = source_model,
         .menu_open = 0,
         .menu_selection = (int)clock_mode,
         .paused = 0,
@@ -274,7 +295,7 @@ int main(int argc, char **argv)
 
         /*
          * Apply requested palette changes once at the comparison-frame
-         * boundary.  This is the virtual-bench counterpart of committing PPU
+         * boundary. This is the virtual-bench counterpart of committing PPU
          * palette writes during the hardware VBlank-safe interval.
          */
         if (palette_pending >= 0) {
@@ -286,11 +307,10 @@ int main(int argc, char **argv)
         }
 
         if (!view.paused && !first_present) {
-            if (gbcrt_clock_scheduler_step(&scheduler)) {
-                if (gb_source_next_frame(&source, &frame) != 0) {
-                    fprintf(stderr, "source frame generation failed\n");
-                    break;
-                }
+            const unsigned advances = gbcrt_clock_scheduler_step(&scheduler);
+            if (advance_source(&source, &frame, advances) != 0) {
+                fprintf(stderr, "source frame generation failed\n");
+                break;
             }
         }
         first_present = 0;
@@ -298,15 +318,17 @@ int main(int argc, char **argv)
         bridge_scale_frame(frame.shade, ext, BRIDGE_BORDER_EXT_INDEX);
         comparison_render(canvas, &frame, ext, &ppu, &view);
 
-        char title[320];
+        char title[360];
         snprintf(title, sizeof(title),
-                 "GB reference | RP2C02 EXT — %s — %s — %s — GB frame %llu — output %llu — repeats %llu",
+                 "GB reference | RP2C02 EXT — %s/%s — %s — %s — GB frame %llu — output %llu — repeats %llu — skipped %llu",
                  view.source_name,
+                 gbcrt_source_model_name(view.source_model),
                  gbcrt_clock_mode_name(view.clock_mode),
                  view.palette_name ? view.palette_name : "palette",
                  (unsigned long long)frame.frame_number,
                  scheduler.output_frames,
-                 scheduler.repeated_output_frames);
+                 scheduler.repeated_output_frames,
+                 scheduler.skipped_source_frames);
         SDL_SetWindowTitle(window, title);
 
         SDL_UpdateTexture(texture, NULL, canvas,
@@ -318,12 +340,14 @@ int main(int argc, char **argv)
 
     release_all_game_keys(&source);
 
-    printf("viewer stopped: mode=%s palette=%s output=%llu source=%llu repeats=%llu\n",
+    printf("viewer stopped: model=%s mode=%s palette=%s output=%llu source=%llu repeats=%llu skipped=%llu\n",
+           gbcrt_source_model_name(view.source_model),
            gbcrt_clock_mode_name(view.clock_mode),
            view.palette_name ? view.palette_name : "unknown",
            scheduler.output_frames,
            scheduler.source_frames,
-           scheduler.repeated_output_frames);
+           scheduler.repeated_output_frames,
+           scheduler.skipped_source_frames);
 
     free(canvas);
     SDL_DestroyTexture(texture);
