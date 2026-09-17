@@ -2,6 +2,7 @@
 #define GBCRT_GB_SOURCE_H
 
 #include "bridge.h"
+#include "source_model.h"
 
 #include <stdint.h>
 
@@ -52,8 +53,16 @@ int gb_source_pattern_create(gb_source_t *source);
 #ifdef GBCRT_ENABLE_SAMEBOY
 /*
  * SameBoy-backed source. ROM and boot ROM are user-supplied files and are
- * never stored in this repository.
+ * never stored in this repository. DMG uses SameBoy's normal framebuffer;
+ * SGB uses SameBoy's official SFC/SNES ICD pixel callbacks so the alternate
+ * video path receives the raw final 2-bit Game Boy pixel stream directly.
  */
+int gb_source_sameboy_create_model(gb_source_t *source,
+                                   const char *rom_path,
+                                   const char *boot_rom_path,
+                                   gbcrt_source_model_t model);
+
+/* Compatibility wrapper: the historical default remains DMG. */
 int gb_source_sameboy_create(gb_source_t *source,
                              const char *rom_path,
                              const char *boot_rom_path);
