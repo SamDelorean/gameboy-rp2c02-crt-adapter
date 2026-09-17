@@ -65,7 +65,7 @@ Implemented now:
 - selectable virtual-bench RP2C02 palette presets;
 - automated regression tests for bridge geometry, source abstraction/joypad, RP2C02 color/palette behavior, RP2C02 raster timing and clock scheduling;
 - a donor-PPU pixel-exact test covering all `256x240 = 61,440` visible pixels;
-- project-authored DMG boot stub and smoke-test ROM for copyright-clean functional CI;
+- project-authored smoke-test ROM plus pinned open-source SameBoy DMG/SGB boot-ROM resources for copyright-clean startup regression;
 - GitHub Actions coverage for dependency-free, SDL2, donor-PPU and combined SameBoy + donor-PPU builds.
 
 The pinned SameBoy library, our adapter, the donor PPU and the SDL2 viewer are tested in CI. The SameBoy job also executes the project-authored smoke ROM and verifies non-uniform image data independently in the SameBoy reference and RP2C02 image regions, plus black side borders. No commercial Game Boy ROM or Nintendo boot ROM is bundled with the project.
@@ -181,20 +181,21 @@ cmake -S emulator -B build/emulator-sameboy \
 cmake --build build/emulator-sameboy
 ```
 
-Run a user-supplied ROM and DMG boot ROM:
+Run a user-supplied DMG-compatible ROM:
 
 ```sh
 ./build/emulator-sameboy/gbcrt_emu \
   --rom /path/to/game.gb \
-  --boot /path/to/dmg_boot.bin \
   --clock sync \
   --frames 120 \
   --out build/emulator-sameboy/comparison.ppm
 ```
 
-No commercial ROM or Nintendo boot ROM is stored in this repository.
+The adapter follows SameBoy's documented frontend contract: `GB_set_boot_rom_load_callback()` supplies the model-appropriate boot image, and SameBoy performs the normal reset/boot sequence. The default DMG/SGB boot images are open-source SameBoy boot ROMs compiled from the same pinned upstream revision and embedded as 256-byte resources. `--boot /path/to/boot.bin` remains available as an explicit override.
 
-CI generates `gbcrt_boot_stub.bin` and `gbcrt_smoke.gb` from `emulator/tests/generate_smoke_rom.py`. These files are entirely project-authored and are used only to prove that actual Game Boy code executes inside SameBoy and reaches the donor RP2C02 preview path.
+No commercial ROM or proprietary Nintendo boot ROM is stored in this repository.
+
+CI generates only `gbcrt_smoke.gb` from `emulator/tests/generate_smoke_rom.py`. The smoke cartridge deliberately does **not** write `$FF50`; successful execution therefore verifies that the frontend boot callback ran a proper SameBoy boot ROM and unmapped it before cartridge execution.
 
 The SGB smoke path deliberately runs longer than the DMG smoke path. SameBoy's HLE models the SGB startup interval during which the Game Boy CPU is held before cartridge execution; CI runs past that interval before validating the raw four-shade SGB screen buffer and the PAL01-driven AUTO/SGB palette.
 
@@ -251,7 +252,6 @@ cmake --build build/emulator-live
 
 ./build/emulator-live/gbcrt_viewer \
   --rom /path/to/game.gb \
-  --boot /path/to/dmg_boot.bin \
   --clock sync
 ```
 
