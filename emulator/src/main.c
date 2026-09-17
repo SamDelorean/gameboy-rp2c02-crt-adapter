@@ -1,4 +1,5 @@
 #include "bridge.h"
+#include "clock_mode.h"
 #include "comparison_render.h"
 #include "gb_source.h"
 #include "ppm.h"
@@ -64,7 +65,7 @@ int main(int argc, char **argv)
     const char *out = "comparison.ppm";
     const char *rom = NULL;
     const char *boot = NULL;
-    unsigned frames = 1;
+    unsigned output_frames = 1;
     gbcrt_clock_mode_t clock_mode = GBCRT_CLOCK_SYNC;
 
     for (int i = 1; i < argc; ++i) {
@@ -72,8 +73,8 @@ int main(int argc, char **argv)
             out = argv[++i];
         }
         else if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
-            frames = (unsigned)strtoul(argv[++i], NULL, 10);
-            if (frames == 0) frames = 1;
+            output_frames = (unsigned)strtoul(argv[++i], NULL, 10);
+            if (output_frames == 0) output_frames = 1;
         }
         else if (strcmp(argv[i], "--clock") == 0 && i + 1 < argc) {
             if (parse_clock_mode(argv[++i], &clock_mode) != 0) {
@@ -98,11 +99,24 @@ int main(int argc, char **argv)
 
     gb_source_frame_t frame;
     memset(&frame, 0, sizeof(frame));
-    for (unsigned n = 0; n < frames; ++n) {
-        if (gb_source_next_frame(&source, &frame) != 0) {
-            fprintf(stderr, "source frame generation failed\n");
-            gb_source_destroy(&source);
-            return 3;
+    if (gb_source_next_frame(&source, &frame) != 0) {
+        fprintf(stderr, "initial source frame generation failed\n");
+        gb_source_destroy(&source);
+        return 3;
+    }
+
+    gbcrt_clock_scheduler_t scheduler;
+    gbcrt_clock_scheduler_init(&scheduler, clock_mode);
+    scheduler.output_frames = 1;
+    scheduler.source_frames = 1;
+
+    for (unsigned n = 1; n < output_frames; ++n) {
+        if (gbcrt_clock_scheduler_step(&scheduler)) {
+            if (gb_source_next_frame(&source, &frame) != 0) {
+                fprintf(stderr, "source frame generation failed\n");
+                gb_source_destroy(&source);
+                return 3;
+            }
         }
     }
 
@@ -139,8 +153,11 @@ int main(int argc, char **argv)
     if (rc != 0) return 5;
 
     printf("wrote %s (%dx%d comparison canvas)\n", out, COMPARISON_W, COMPARISON_H);
-    printf("source: %s, frame: %llu\n", source_name,
-           (unsigned long long)frame.frame_number);
+    printf("source: %s, GB frame: %llu, output frame: %llu, repeated outputs: %llu\n",
+           source_name,
+           (unsigned long long)frame.frame_number,
+           scheduler.output_frames,
+           scheduler.repeated_output_frames);
     printf("clock mode: %s, GB %.6f Hz, GB frame %.6f Hz, PPU frame %.6f Hz\n",
            gbcrt_clock_mode_name(clock_mode),
            gbcrt_gb_clock_hz(clock_mode),
