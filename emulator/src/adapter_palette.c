@@ -1,11 +1,12 @@
 #include "adapter_palette.h"
 #include "bridge.h"
 
+#include <limits.h>
 #include <stddef.h>
 
 /*
- * Virtual-bench presets only.  Their count/names do not freeze the final V1
- * hardware preset set.  Within each preset, Game Boy shade 0 is lightest and
+ * Virtual-bench presets only. Their count/names do not freeze the final V1
+ * hardware preset set. Within each preset, Game Boy shade 0 is lightest and
  * shade 3 is darkest.
  */
 static const adapter_palette_preset_t presets[] = {
@@ -38,5 +39,54 @@ void adapter_palette_apply(rp2c02_ext_t *ppu, unsigned index)
     }
 
     /* V1 side borders remain fixed canonical black regardless of preset. */
+    rp2c02_ext_write_palette(ppu, BRIDGE_BORDER_EXT_INDEX, 0x0Fu);
+}
+
+static unsigned expand5(unsigned value)
+{
+    value &= 0x1fu;
+    return (value << 3) | (value >> 2);
+}
+
+uint8_t adapter_palette_quantize_rgb555(uint16_t rgb555)
+{
+    const int r = (int)expand5(rgb555);
+    const int g = (int)expand5(rgb555 >> 5);
+    const int b = (int)expand5(rgb555 >> 10);
+
+    unsigned best_error = UINT_MAX;
+    uint8_t best_code = 0x0fu;
+
+    for (unsigned code = 0; code < 64u; ++code) {
+        /* $0D is deliberately avoided for the NTSC hardware path. */
+        if (code == 0x0du) continue;
+
+        const rgb8_t candidate = rp2c02_demo_rgb((uint8_t)code);
+        const int dr = r - (int)candidate.r;
+        const int dg = g - (int)candidate.g;
+        const int db = b - (int)candidate.b;
+        const unsigned error = (unsigned)(dr * dr + dg * dg + db * db);
+
+        if (error < best_error) {
+            best_error = error;
+            best_code = (uint8_t)code;
+        }
+    }
+
+    return best_code;
+}
+
+void adapter_palette_apply_sgb_rgb555(rp2c02_ext_t *ppu,
+                                      const uint16_t rgb555[4])
+{
+    if (!ppu || !rgb555) return;
+
+    for (unsigned shade = 0; shade < BRIDGE_SHADE_COUNT; ++shade) {
+        rp2c02_ext_write_palette(ppu,
+                                 shade,
+                                 adapter_palette_quantize_rgb555(rgb555[shade]));
+    }
+
+    /* Automatic SGB colorization never changes the V1 black side borders. */
     rp2c02_ext_write_palette(ppu, BRIDGE_BORDER_EXT_INDEX, 0x0Fu);
 }
