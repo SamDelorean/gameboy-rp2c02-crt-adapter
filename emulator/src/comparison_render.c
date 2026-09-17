@@ -94,13 +94,8 @@ static void draw_menu(rgb8_t *canvas, const comparison_view_state_t *state)
     rect(canvas, 30, 124, 310, 28,
          selected == 1 ? active : (rgb8_t){45, 45, 50});
 
-    char stock_label[64];
-    snprintf(stock_label, sizeof(stock_label),
-             state->source_model == GBCRT_SOURCE_MODEL_SGB ?
-                 "STOCK SGB  4.295454 MHZ" :
-                 "STOCK DMG  4.194304 MHZ");
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                      42, 96, 1, stock_label, accent);
+                      42, 96, 1, "STOCK GB   4.194304 MHZ", accent);
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
                       42, 132, 1, "SYNC       4.220355 MHZ", accent);
 }
