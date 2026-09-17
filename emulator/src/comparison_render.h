@@ -12,6 +12,7 @@
 
 typedef struct {
     gbcrt_clock_mode_t clock_mode;
+    gbcrt_source_model_t source_model;
     int menu_open;
     int menu_selection;
     int paused;
