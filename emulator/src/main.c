@@ -11,12 +11,25 @@
 static void usage(const char *argv0)
 {
     fprintf(stderr,
-            "usage: %s [--out comparison.ppm] [--frames N]"
+            "usage: %s [--out comparison.ppm] [--frames N] [--clock stock|sync]"
 #ifdef GBCRT_ENABLE_SAMEBOY
             " [--rom game.gb --boot dmg_boot.bin]"
 #endif
             "\n",
             argv0);
+}
+
+static int parse_clock_mode(const char *text, gbcrt_clock_mode_t *mode)
+{
+    if (strcmp(text, "stock") == 0) {
+        *mode = GBCRT_CLOCK_STOCK;
+        return 0;
+    }
+    if (strcmp(text, "sync") == 0) {
+        *mode = GBCRT_CLOCK_SYNC;
+        return 0;
+    }
+    return -1;
 }
 
 static int create_source(gb_source_t *source,
@@ -52,6 +65,7 @@ int main(int argc, char **argv)
     const char *rom = NULL;
     const char *boot = NULL;
     unsigned frames = 1;
+    gbcrt_clock_mode_t clock_mode = GBCRT_CLOCK_SYNC;
 
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--out") == 0 && i + 1 < argc) {
@@ -60,6 +74,12 @@ int main(int argc, char **argv)
         else if (strcmp(argv[i], "--frames") == 0 && i + 1 < argc) {
             frames = (unsigned)strtoul(argv[++i], NULL, 10);
             if (frames == 0) frames = 1;
+        }
+        else if (strcmp(argv[i], "--clock") == 0 && i + 1 < argc) {
+            if (parse_clock_mode(argv[++i], &clock_mode) != 0) {
+                usage(argv[0]);
+                return 1;
+            }
         }
         else if (strcmp(argv[i], "--rom") == 0 && i + 1 < argc) {
             rom = argv[++i];
@@ -102,12 +122,18 @@ int main(int argc, char **argv)
         return 4;
     }
 
-    comparison_render(canvas, &frame, ext, &ppu);
+    const char *source_name = source.ops && source.ops->name ? source.ops->name : "unknown";
+    comparison_view_state_t view = {
+        .clock_mode = clock_mode,
+        .menu_open = 0,
+        .menu_selection = (int)clock_mode,
+        .paused = 0,
+        .source_name = source_name,
+    };
+    comparison_render(canvas, &frame, ext, &ppu, &view);
 
     const int rc = ppm_write_rgb(out, canvas, COMPARISON_W, COMPARISON_H);
     free(canvas);
-
-    const char *source_name = source.ops && source.ops->name ? source.ops->name : "unknown";
     gb_source_destroy(&source);
 
     if (rc != 0) return 5;
@@ -115,6 +141,11 @@ int main(int argc, char **argv)
     printf("wrote %s (%dx%d comparison canvas)\n", out, COMPARISON_W, COMPARISON_H);
     printf("source: %s, frame: %llu\n", source_name,
            (unsigned long long)frame.frame_number);
+    printf("clock mode: %s, GB %.6f Hz, GB frame %.6f Hz, PPU frame %.6f Hz\n",
+           gbcrt_clock_mode_name(clock_mode),
+           gbcrt_gb_clock_hz(clock_mode),
+           gbcrt_gb_frame_hz(clock_mode),
+           gbcrt_ppu_frame_hz());
     printf("left: source reference 160x144; right: RP2C02 EXT path 256x240\n");
     return 0;
 }
