@@ -112,6 +112,11 @@ static void draw_rp2c02_frame(rgb8_t *canvas,
      * Walk one complete 341x262 rendering-disabled RP2C02 frame. Only the
      * 256x240 visible dots paint the comparison surface, but blanking and
      * VBlank consume their real positions in the timing model.
+     *
+     * Color selection goes through the rendering-disabled hardware rule, not
+     * directly through palette RAM: EXT selects the backdrop palette entry
+     * unless the PPU's v address is still inside $3F00-$3FFF, in which case
+     * the addressed palette entry overrides EXT.
      */
     for (unsigned i = 0; i < RP2C02_FRAME_DOTS; ++i) {
         const unsigned x = timing.dot;
@@ -119,7 +124,8 @@ static void draw_rp2c02_frame(rgb8_t *canvas,
         const unsigned events = rp2c02_timing_step(&timing);
 
         if (events & RP2C02_TIMING_VISIBLE_DOT) {
-            const uint8_t code = rp2c02_ext_palette_code(ppu, ext[y][x]);
+            const uint8_t code =
+                rp2c02_ext_rendering_disabled_code(ppu, ext[y][x]);
             rect(canvas,
                  rx + x * scale,
                  ry + y * scale,
