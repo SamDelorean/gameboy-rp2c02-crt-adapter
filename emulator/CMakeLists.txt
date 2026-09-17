@@ -6,6 +6,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
 option(GBCRT_ENABLE_SAMEBOY "Build the optional SameBoy-backed ROM source" OFF)
+option(GBCRT_ENABLE_SDL2 "Build the optional live SDL2 comparison viewer" OFF)
 set(SAMEBOY_ROOT "" CACHE PATH "Path to a SameBoy checkout built with 'make lib'")
 
 add_library(gbcrt_core
@@ -14,6 +15,7 @@ add_library(gbcrt_core
     src/pattern_source.c
     src/gb_source.c
     src/gb_source_pattern.c
+    src/comparison_render.c
     src/ppm.c
 )
 target_include_directories(gbcrt_core PUBLIC src)
@@ -54,6 +56,14 @@ endif()
 
 add_executable(gbcrt_emu src/main.c)
 target_link_libraries(gbcrt_emu PRIVATE gbcrt_core)
+
+if(GBCRT_ENABLE_SDL2)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2)
+
+    add_executable(gbcrt_viewer src/viewer_sdl.c)
+    target_link_libraries(gbcrt_viewer PRIVATE gbcrt_core PkgConfig::SDL2)
+endif()
 
 include(CTest)
 if(BUILD_TESTING)
