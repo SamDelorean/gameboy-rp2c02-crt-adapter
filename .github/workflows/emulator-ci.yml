@@ -110,7 +110,7 @@ jobs:
           python3 emulator/tests/validate_smoke_ppm.py \
             build/emulator-sameboy/smoke-dmg.ppm
 
-      - name: Execute smoke ROM through SameBoy SGB ICD and alternate video path
+      - name: Execute smoke ROM through SameBoy SGB HLE and alternate video path
         run: |
           ./build/emulator-sameboy/gbcrt_emu \
             --source-model sgb \
@@ -120,8 +120,8 @@ jobs:
             --frames 12 \
             --out build/emulator-sameboy/smoke-sgb.ppm \
             | tee build/emulator-sameboy/smoke-sgb.log
-          grep -q 'source: SameBoy SGB ICD, model: SGB' build/emulator-sameboy/smoke-sgb.log
-          grep -q 'palette: AUTO/SGB PAL00; SGB valid=1 sequence=1' build/emulator-sameboy/smoke-sgb.log
+          grep -q 'source: SameBoy SGB, model: SGB' build/emulator-sameboy/smoke-sgb.log
+          grep -q 'palette: AUTO/SGB; SGB valid=1' build/emulator-sameboy/smoke-sgb.log
           python3 emulator/tests/validate_smoke_ppm.py \
             build/emulator-sameboy/smoke-sgb.ppm
 
