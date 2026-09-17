@@ -19,16 +19,17 @@ cd "$SAMEBOY_DIR"
 git fetch origin "$SAMEBOY_COMMIT"
 git checkout --detach "$SAMEBOY_COMMIT"
 
-# Build SameBoy as a reusable library. These optional feature reductions keep
-# the dependency focused on ROM execution/display rather than debugger/rewind.
-make lib \
+# We only need the reusable core archive plus the checked-in Core headers.
+# Building SameBoy's full `lib` target also generates processed public headers
+# with the external `cppp` utility; that extra tool is unnecessary here.
+make build/lib/libsameboy.a \
     CONF=release \
     DISABLE_DEBUGGER=1 \
     DISABLE_CHEATS=1 \
     DISABLE_CHEAT_SEARCH=1 \
     DISABLE_REWIND=1
 
-printf '\nSameBoy ready at:\n  %s\n' "$SAMEBOY_DIR"
+printf '\nSameBoy static core ready at:\n  %s\n' "$SAMEBOY_DIR"
 printf '\nConfigure the hybrid emulator with:\n'
 printf '  cmake -S "%s" -B "%s/build" -DGBCRT_ENABLE_SAMEBOY=ON -DSAMEBOY_ROOT="%s"\n' \
     "$EMU_DIR" "$EMU_DIR" "$SAMEBOY_DIR"
