@@ -71,7 +71,7 @@ static void draw_menu(rgb8_t *canvas, const comparison_view_state_t *state)
 
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
                       360, 18, 1,
-                      "M MENU   C TOGGLE   SPACE PAUSE   Q QUIT",
+                      "M MENU   C CLOCK   P PALETTE   SPACE PAUSE   Q QUIT",
                       text);
 
     if (state && state->paused) {
@@ -200,4 +200,11 @@ void comparison_render(rgb8_t *canvas,
                       79, 652, 1,
                       "ARROWS MOVE  Z A  X B  BKSP SELECT  ENTER START",
                       secondary);
+
+    if (state && state->palette_name) {
+        ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                          696, 650, 1, "PALETTE", secondary);
+        ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                          760, 650, 1, state->palette_name, text);
+    }
 }
