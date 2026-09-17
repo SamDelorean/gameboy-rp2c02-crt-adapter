@@ -43,3 +43,9 @@ unsigned rp2c02_timing_step(rp2c02_timing_t *timing)
 
     return events;
 }
+
+bool rp2c02_timing_nmi_asserted(const rp2c02_timing_t *timing,
+                                 bool nmi_enabled)
+{
+    return timing && nmi_enabled && timing->vblank;
+}
