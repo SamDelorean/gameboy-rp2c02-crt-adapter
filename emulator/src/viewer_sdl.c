@@ -103,6 +103,38 @@ static void release_all_game_keys(gb_source_t *source)
     }
 }
 
+/* palette_mode 0 = AUTO/SGB, 1..N = manual presets. */
+static void apply_palette_mode(rp2c02_ext_t *ppu,
+                               const gb_source_frame_t *frame,
+                               unsigned palette_mode,
+                               uint64_t *applied_sgb_sequence,
+                               char *label,
+                               size_t label_size)
+{
+    if (palette_mode == 0u) {
+        if (frame->sgb_palette_valid) {
+            adapter_palette_apply_sgb_rgb555(ppu, frame->sgb_palette_rgb555);
+            *applied_sgb_sequence = frame->sgb_palette_sequence;
+            snprintf(label, label_size,
+                     "AUTO/SGB PAL%02X", frame->sgb_palette_command);
+        }
+        else {
+            const adapter_palette_preset_t *fallback = adapter_palette_get(0u);
+            adapter_palette_apply(ppu, 0u);
+            *applied_sgb_sequence = 0u;
+            snprintf(label, label_size,
+                     "AUTO/SGB FALLBACK %s",
+                     fallback ? fallback->name : "PALETTE");
+        }
+        return;
+    }
+
+    const unsigned manual_index = palette_mode - 1u;
+    const adapter_palette_preset_t *preset = adapter_palette_get(manual_index);
+    adapter_palette_apply(ppu, manual_index);
+    snprintf(label, label_size, "%s", preset ? preset->name : "MANUAL");
+}
+
 int main(int argc, char **argv)
 {
     const char *rom = NULL;
@@ -181,13 +213,6 @@ int main(int argc, char **argv)
         return 4;
     }
 
-    rp2c02_ext_t ppu;
-    rp2c02_ext_reset(&ppu);
-    unsigned palette_index = 0u;
-    int palette_pending = -1;
-    adapter_palette_apply(&ppu, palette_index);
-    const adapter_palette_preset_t *palette = adapter_palette_get(palette_index);
-
     gb_source_frame_t frame;
     memset(&frame, 0, sizeof(frame));
     if (gb_source_next_frame(&source, &frame) != 0) {
@@ -200,6 +225,19 @@ int main(int argc, char **argv)
         free(canvas);
         return 5;
     }
+
+    rp2c02_ext_t ppu;
+    rp2c02_ext_reset(&ppu);
+    unsigned palette_mode = 0u; /* AUTO/SGB by default, matching hardware policy. */
+    int palette_pending = -1;
+    uint64_t applied_sgb_sequence = 0u;
+    char palette_label[96];
+    apply_palette_mode(&ppu,
+                       &frame,
+                       palette_mode,
+                       &applied_sgb_sequence,
+                       palette_label,
+                       sizeof(palette_label));
 
     uint8_t ext[PPU_ACTIVE_H][PPU_ACTIVE_W];
 
@@ -216,7 +254,7 @@ int main(int argc, char **argv)
         .menu_selection = (int)clock_mode,
         .paused = 0,
         .source_name = source.ops && source.ops->name ? source.ops->name : "source",
-        .palette_name = palette ? palette->name : "unknown",
+        .palette_name = palette_label,
     };
 
     int running = 1;
@@ -259,7 +297,10 @@ int main(int argc, char **argv)
                     apply_clock_mode(&scheduler, &view, next);
                 }
                 else if (key == SDLK_p) {
-                    palette_pending = (int)((palette_index + 1u) % adapter_palette_count());
+                    /* Same cycle as the planned one-button hardware UI:
+                       AUTO/SGB -> manual 1..N -> AUTO/SGB. */
+                    palette_pending =
+                        (int)((palette_mode + 1u) % (adapter_palette_count() + 1u));
                 }
                 else if (view.menu_open &&
                          (key == SDLK_UP || key == SDLK_DOWN ||
@@ -293,19 +334,6 @@ int main(int argc, char **argv)
 
         if (!running) break;
 
-        /*
-         * Apply requested palette changes once at the comparison-frame
-         * boundary. This is the virtual-bench counterpart of committing PPU
-         * palette writes during the hardware VBlank-safe interval.
-         */
-        if (palette_pending >= 0) {
-            palette_index = (unsigned)palette_pending;
-            palette_pending = -1;
-            adapter_palette_apply(&ppu, palette_index);
-            palette = adapter_palette_get(palette_index);
-            view.palette_name = palette ? palette->name : "unknown";
-        }
-
         if (!view.paused && !first_present) {
             const unsigned advances = gbcrt_clock_scheduler_step(&scheduler);
             if (advance_source(&source, &frame, advances) != 0) {
@@ -315,16 +343,43 @@ int main(int argc, char **argv)
         }
         first_present = 0;
 
+        /*
+         * Commit palette changes only at the comparison-frame boundary. Manual
+         * mode ignores later SGB traffic while SameBoy/source metadata keeps
+         * caching it; returning to AUTO/SGB immediately applies the latest
+         * valid cached palette.
+         */
+        if (palette_pending >= 0) {
+            palette_mode = (unsigned)palette_pending;
+            palette_pending = -1;
+            apply_palette_mode(&ppu,
+                               &frame,
+                               palette_mode,
+                               &applied_sgb_sequence,
+                               palette_label,
+                               sizeof(palette_label));
+        }
+        else if (palette_mode == 0u &&
+                 frame.sgb_palette_valid &&
+                 frame.sgb_palette_sequence != applied_sgb_sequence) {
+            apply_palette_mode(&ppu,
+                               &frame,
+                               palette_mode,
+                               &applied_sgb_sequence,
+                               palette_label,
+                               sizeof(palette_label));
+        }
+
         bridge_scale_frame(frame.shade, ext, BRIDGE_BORDER_EXT_INDEX);
         comparison_render(canvas, &frame, ext, &ppu, &view);
 
-        char title[360];
+        char title[400];
         snprintf(title, sizeof(title),
                  "GB reference | RP2C02 EXT — %s/%s — %s — %s — GB frame %llu — output %llu — repeats %llu — skipped %llu",
                  view.source_name,
                  gbcrt_source_model_name(view.source_model),
                  gbcrt_clock_mode_name(view.clock_mode),
-                 view.palette_name ? view.palette_name : "palette",
+                 palette_label,
                  (unsigned long long)frame.frame_number,
                  scheduler.output_frames,
                  scheduler.repeated_output_frames,
@@ -343,7 +398,7 @@ int main(int argc, char **argv)
     printf("viewer stopped: model=%s mode=%s palette=%s output=%llu source=%llu repeats=%llu skipped=%llu\n",
            gbcrt_source_model_name(view.source_model),
            gbcrt_clock_mode_name(view.clock_mode),
-           view.palette_name ? view.palette_name : "unknown",
+           palette_label,
            scheduler.output_frames,
            scheduler.source_frames,
            scheduler.repeated_output_frames,
