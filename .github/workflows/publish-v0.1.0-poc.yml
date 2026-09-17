@@ -1,0 +1,31 @@
+name: Publish v0.1.0-poc
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-v0.1.0-poc.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create v0.1.0-poc release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.1.0-poc >/dev/null 2>&1; then
+            echo "v0.1.0-poc already exists; nothing to do."
+            exit 0
+          fi
+
+          gh release create v0.1.0-poc \
+            --target "$GITHUB_SHA" \
+            --title "v0.1.0-poc — Hybrid Game Boy → RP2C02 proof of concept" \
+            --notes-file CHANGELOG.md
