@@ -23,10 +23,6 @@ add_library(gbcrt_core
 )
 target_include_directories(gbcrt_core PUBLIC src)
 
-if(UNIX)
-    target_link_libraries(gbcrt_core PUBLIC m)
-endif()
-
 if(GBCRT_ENABLE_SAMEBOY)
     if(NOT SAMEBOY_ROOT)
         message(FATAL_ERROR "GBCRT_ENABLE_SAMEBOY=ON requires -DSAMEBOY_ROOT=/path/to/SameBoy")
@@ -60,6 +56,12 @@ if(GBCRT_ENABLE_SAMEBOY)
         GB_DISABLE_CHEAT_SEARCH=1)
     target_compile_definitions(gbcrt_core PUBLIC GBCRT_ENABLE_SAMEBOY=1)
     target_link_libraries(gbcrt_core PUBLIC SameBoy::Core)
+endif()
+
+# Keep libm after optional static archives. GNU ld resolves static archives from
+# left to right, and SameBoy itself references sin/cos/pow/round/etc.
+if(UNIX)
+    target_link_libraries(gbcrt_core PUBLIC m)
 endif()
 
 add_executable(gbcrt_emu src/main.c)
