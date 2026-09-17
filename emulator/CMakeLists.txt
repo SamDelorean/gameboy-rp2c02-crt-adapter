@@ -85,6 +85,10 @@ if(BUILD_TESTING)
     target_link_libraries(test_source PRIVATE gbcrt_core)
     add_test(NAME source_abstraction COMMAND test_source)
 
+    add_executable(test_rp2c02_ext tests/test_rp2c02_ext.c)
+    target_link_libraries(test_rp2c02_ext PRIVATE gbcrt_core)
+    add_test(NAME rp2c02_ext_palette COMMAND test_rp2c02_ext)
+
     add_executable(test_rp2c02_timing tests/test_rp2c02_timing.c)
     target_link_libraries(test_rp2c02_timing PRIVATE gbcrt_core)
     add_test(NAME rp2c02_timing COMMAND test_rp2c02_timing)
