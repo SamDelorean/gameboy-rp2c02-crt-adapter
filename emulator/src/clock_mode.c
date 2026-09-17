@@ -2,8 +2,7 @@
 
 #include <math.h>
 
-#define DMG_CLOCK_STOCK_HZ 4194304.0
-#define SGB_NTSC_CLOCK_STOCK_HZ (21477272.0 / 5.0)
+#define GB_CLOCK_STOCK_HZ 4194304.0
 #define GB_CLOCKS_PER_FRAME 70224.0
 #define RP2C02_MASTER_HZ 21477272.727272727
 #define RP2C02_MASTER_DIV_TO_DOT 4.0
@@ -23,12 +22,26 @@ double gbcrt_ppu_frame_hz(void)
 double gbcrt_gb_clock_hz(gbcrt_clock_mode_t mode,
                          gbcrt_source_model_t source_model)
 {
+    /*
+     * Source model and source clock are intentionally independent.
+     *
+     * For the hardware project an SGB source is assumed to have its original
+     * SNES-derived clock isolated and replaced by the external Game Boy clock.
+     * Therefore DMG and SGB use the same two virtual-bench clock choices:
+     *
+     *   STOCK = original Game Boy frequency
+     *   SYNC  = frequency locked to one RP2C02 frame per Game Boy frame
+     *
+     * SameBoy can continue to model SGB internals normally; the virtual bench
+     * assigns the completed 70224-cycle frames to the selected external clock.
+     */
+    (void)source_model;
+
     if (mode == GBCRT_CLOCK_SYNC) {
         return gbcrt_ppu_frame_hz() * GB_CLOCKS_PER_FRAME;
     }
 
-    return source_model == GBCRT_SOURCE_MODEL_SGB ?
-        SGB_NTSC_CLOCK_STOCK_HZ : DMG_CLOCK_STOCK_HZ;
+    return GB_CLOCK_STOCK_HZ;
 }
 
 double gbcrt_gb_frame_hz(gbcrt_clock_mode_t mode,
