@@ -159,7 +159,6 @@ jobs:
           ./build/emulator-sameboy/gbcrt_emu \
             --source-model sgb \
             --rom build/emulator-smoke/gbcrt_smoke.gb \
-            --boot build/emulator-smoke/gbcrt_boot_stub.bin \
             --clock sync \
             --frames 130 \
             --out build/emulator-sameboy/smoke-sgb.ppm \
