@@ -50,9 +50,11 @@ def main() -> None:
 
     pixels = read_ppm(args.ppm)
 
-    # Exact video wells from comparison_render.c.
-    left = sampled_colors(pixels, 85, 150, 480, 432, 6)
-    right = sampled_colors(pixels, 699, 132, 512, 480, 6)
+    # Exact video wells from comparison_render.c.  Use a 5-pixel sampling step:
+    # it is deliberately not harmonic with the smoke ROM's 2-source-pixel
+    # checker period after either the 3x reference scale or 2x RP2C02 scale.
+    left = sampled_colors(pixels, 85, 150, 480, 432, 5)
+    right = sampled_colors(pixels, 699, 132, 512, 480, 5)
 
     if len(left) < 2:
         raise SystemExit(f"SameBoy reference region is uniform: {left}")
