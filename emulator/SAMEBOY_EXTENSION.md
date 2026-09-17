@@ -4,7 +4,9 @@
 
 The preferred desktop emulator is **SameBoy with an added alternate RP2C02 video output**, not a replacement frontend built around the SameBoy core.
 
-The existing standalone code under `emulator/` remains a regression and experimentation bench for the bridge and reduced RP2C02 model. User-facing development should preserve SameBoy and add the alternate output with the smallest maintainable patch surface.
+The existing standalone code under `emulator/` remains a regression and experimentation bench for the bridge. User-facing development should preserve SameBoy and add the alternate output with the smallest maintainable patch surface.
+
+For the RP2C02 preview itself, the preferred high-fidelity software path reuses the pinned `johnmph/NESEmu` Ricoh2C02 implementation rather than extending the project-owned reduced PPU model into a second NES emulator.
 
 ## Preserve SameBoy
 
@@ -35,7 +37,7 @@ The pinned SameBoy SDL frontend already has the required boundaries:
 
 Therefore the first extension should avoid changes to the Game Boy execution loop itself.
 
-### Proposed flow
+### Preferred flow
 
 ```text
 SameBoy core
@@ -47,42 +49,44 @@ SameBoy core
     +-> four-shade logical image
             |
             v
-      gbcrt_adapter
+      project bridge
       - 160x144 -> 234x240
       - 11/11 borders
-      - palette mapping
+      - EXT indices 0..4
             |
             v
-      reduced RP2C02 output
+      pinned NESEmu Ricoh2C02
+      - EXT input
+      - palette RAM/register path
+      - 341x262 timing
+      - 256x240 visible pixels
             |
             v
-      second comparison surface
+      existing comparison surface
 ```
+
+The dependency-free reduced `rp2c02_ext` and `rp2c02_timing` implementation remains available for unit tests, regression comparison and builds that intentionally avoid the external PPU donor.
 
 The first implementation may recover the four Game Boy shade indices from SameBoy's known DMG output or use an existing SameBoy internal raw-shade buffer where available. SGB mode should reuse SameBoy's already-decoded SGB palette state rather than reimplementing SGB transport.
 
 ## Project-owned module boundary
 
-Keep the added logic in a small module that can be compiled both by the standalone regression bench and by the SameBoy extension.
+Keep the added logic small and explicit:
 
-Suggested interface:
-
-```c
-typedef struct gbcrt_alt_video gbcrt_alt_video_t;
-
-void gbcrt_alt_video_init(gbcrt_alt_video_t *state);
-void gbcrt_alt_video_set_palette_mode(gbcrt_alt_video_t *state, unsigned mode);
-void gbcrt_alt_video_next_palette(gbcrt_alt_video_t *state);
-
-void gbcrt_alt_video_render(
-    gbcrt_alt_video_t *state,
-    const uint8_t shade[144][160],
-    const uint16_t sgb_rgb555[4],
-    bool sgb_palette_valid,
-    uint32_t out_rgb[240][256]);
+```text
+SameBoy source -> project bridge -> RP2C02 donor wrapper -> existing renderer
 ```
 
-This is deliberately a logical adapter. It does not model RP2350/Arduino execution.
+The donor wrapper is `rp2c02_nesemu.cpp`. It exposes a C ABI so NESEmu's C++ templates do not leak into the rest of the C codebase.
+
+The wrapper deliberately supplies only:
+
+- the project's EXT nibble stream;
+- the small write-side PPU register state;
+- palette RAM contents;
+- a pixel callback sink for native six-bit RP2C02 color codes.
+
+It does not model RP2350/Arduino execution.
 
 ## SameBoy UI integration
 
@@ -126,19 +130,23 @@ The two image wells should have explicit frames so geometry and centering can be
 
 ## RP2C02 scope
 
-The extension models only the PPU behavior needed by this project:
+The preview needs only the PPU behavior used by this project:
 
-- 341x262 timing model;
+- Ricoh 2C02 raster timing;
 - 256x240 visible region;
-- palette RAM subset and mirroring;
-- rendering-disabled EXT behavior;
-- VBlank boundary;
-- 64-code RP2C02 display palette for desktop visualization.
+- internal palette RAM and mirroring;
+- rendering-disabled EXT input behavior;
+- VBlank/frame progression;
+- native six-bit RP2C02 color codes.
 
-It does not add a 6502, APU, NES cartridge mapper, CHR rendering or sprite engine.
+The pinned NESEmu core provides those behaviors. The project then converts the six-bit color code with its simple monitor-preview LUT. Analog composite/VOUT synthesis, CRT filters and decoder simulation are intentionally out of scope for this preview.
+
+The integration does not add or run a 6502, APU, NES cartridge mapper, game CHR path or NESEmu frontend.
 
 ## Development discipline
 
-The standalone `emulator/` regression tests remain authoritative for bridge geometry and the reduced PPU model. SameBoy integration should call that same project-owned logic rather than fork a second copy inside SameBoy.
+The standalone `emulator/` regression tests remain authoritative for bridge geometry. The reduced project PPU model remains an independent regression oracle, while the optional NESEmu-backed build supplies the primary higher-fidelity RP2C02 preview.
 
-The desired patch to SameBoy is therefore mostly **presentation and plumbing**, not emulator reimplementation.
+The dedicated `rp2c02_nesemu_ext_path` test verifies all 61,440 visible pixels of a frame against known EXT indices and palette entries. CI also enables the donor backend in the pinned SameBoy smoke-ROM path.
+
+The desired patch to SameBoy therefore remains mostly **presentation and plumbing**, not emulator reimplementation.
