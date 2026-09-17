@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build pinned SameBoy library
-        run: ./emulator/scripts/bootstrap_sameboy.sh
+        run: sh ./emulator/scripts/bootstrap_sameboy.sh
 
       - name: Configure SameBoy-backed emulator
         run: |
