@@ -5,13 +5,52 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_C_EXTENSIONS OFF)
 
+option(GBCRT_ENABLE_SAMEBOY "Build the optional SameBoy-backed ROM source" OFF)
+set(SAMEBOY_ROOT "" CACHE PATH "Path to a SameBoy checkout built with 'make lib'")
+
 add_library(gbcrt_core
     src/bridge.c
     src/rp2c02_ext.c
     src/pattern_source.c
+    src/gb_source.c
+    src/gb_source_pattern.c
     src/ppm.c
 )
 target_include_directories(gbcrt_core PUBLIC src)
+
+if(GBCRT_ENABLE_SAMEBOY)
+    if(NOT SAMEBOY_ROOT)
+        message(FATAL_ERROR "GBCRT_ENABLE_SAMEBOY=ON requires -DSAMEBOY_ROOT=/path/to/SameBoy")
+    endif()
+
+    find_library(SAMEBOY_LIBRARY
+        NAMES sameboy libsameboy
+        PATHS "${SAMEBOY_ROOT}/build/lib"
+        NO_DEFAULT_PATH)
+
+    if(NOT SAMEBOY_LIBRARY)
+        message(FATAL_ERROR
+            "SameBoy library not found under ${SAMEBOY_ROOT}/build/lib. Run 'make lib' in the SameBoy checkout first.")
+    endif()
+
+    if(NOT EXISTS "${SAMEBOY_ROOT}/build/include/sameboy/gb.h")
+        message(FATAL_ERROR
+            "SameBoy public headers not found. Run 'make lib' in ${SAMEBOY_ROOT} first.")
+    endif()
+
+    add_library(SameBoy::Core UNKNOWN IMPORTED)
+    set_target_properties(SameBoy::Core PROPERTIES
+        IMPORTED_LOCATION "${SAMEBOY_LIBRARY}"
+        INTERFACE_INCLUDE_DIRECTORIES "${SAMEBOY_ROOT}/build/include")
+
+    target_sources(gbcrt_core PRIVATE src/gb_source_sameboy.c)
+    target_compile_definitions(gbcrt_core PUBLIC GBCRT_ENABLE_SAMEBOY=1)
+    target_link_libraries(gbcrt_core PUBLIC SameBoy::Core)
+
+    if(UNIX)
+        target_link_libraries(gbcrt_core PUBLIC m)
+    endif()
+endif()
 
 add_executable(gbcrt_emu src/main.c)
 target_link_libraries(gbcrt_emu PRIVATE gbcrt_core)
