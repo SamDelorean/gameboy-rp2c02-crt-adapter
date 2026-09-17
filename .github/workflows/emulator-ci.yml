@@ -129,12 +129,19 @@ jobs:
       - name: Generate project-authored smoke ROM
         run: python3 emulator/tests/generate_smoke_rom.py build/emulator-smoke
 
+      - name: Verify smoke ROM does not self-unmap a boot stub
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          rom = Path("build/emulator-smoke/gbcrt_smoke.gb").read_bytes()
+          assert bytes((0xE0, 0x50)) not in rom[0x0150:0x0300]
+          PY
+
       - name: Execute smoke ROM through SameBoy DMG and alternate video path
         run: |
           ./build/emulator-sameboy/gbcrt_emu \
             --source-model dmg \
             --rom build/emulator-smoke/gbcrt_smoke.gb \
-            --boot build/emulator-smoke/gbcrt_boot_stub.bin \
             --clock sync \
             --frames 12 \
             --out build/emulator-sameboy/smoke-dmg.ppm \
