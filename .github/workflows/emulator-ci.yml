@@ -146,16 +146,19 @@ jobs:
 
       - name: Execute smoke ROM through SameBoy SGB HLE and alternate video path
         run: |
+          # SameBoy HLE intentionally holds the GB CPU during the SGB intro.
+          # Run beyond that interval so the project smoke ROM actually executes,
+          # paints its two-shade checker and sends its PAL01 packet.
           ./build/emulator-sameboy/gbcrt_emu \
             --source-model sgb \
             --rom build/emulator-smoke/gbcrt_smoke.gb \
             --boot build/emulator-smoke/gbcrt_boot_stub.bin \
             --clock sync \
-            --frames 12 \
+            --frames 130 \
             --out build/emulator-sameboy/smoke-sgb.ppm \
             | tee build/emulator-sameboy/smoke-sgb.log
           grep -q 'source: SameBoy SGB, model: SGB' build/emulator-sameboy/smoke-sgb.log
-          grep -q 'palette: AUTO/SGB; SGB valid=1' build/emulator-sameboy/smoke-sgb.log
+          grep -q 'palette: AUTO/SGB; SGB valid=1 sequence=2' build/emulator-sameboy/smoke-sgb.log
           python3 emulator/tests/validate_smoke_ppm.py \
             build/emulator-sameboy/smoke-sgb.ppm \
             --allow-uniform-left

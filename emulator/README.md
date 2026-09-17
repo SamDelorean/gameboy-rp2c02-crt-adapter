@@ -196,6 +196,8 @@ No commercial ROM or Nintendo boot ROM is stored in this repository.
 
 CI generates `gbcrt_boot_stub.bin` and `gbcrt_smoke.gb` from `emulator/tests/generate_smoke_rom.py`. These files are entirely project-authored and are used only to prove that actual Game Boy code executes inside SameBoy and reaches the donor RP2C02 preview path.
 
+The SGB smoke path deliberately runs longer than the DMG smoke path. SameBoy's HLE models the SGB startup interval during which the Game Boy CPU is held before cartridge execution; CI runs past that interval before validating the raw four-shade SGB screen buffer and the PAL01-driven AUTO/SGB palette.
+
 ## Alternate-output palettes
 
 Game Boy shades remain logical values `0..3`; changing the RP2C02 palette does not change SameBoy, source capture, scaling or framebuffer contents.
