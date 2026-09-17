@@ -25,6 +25,7 @@ int main(void)
     assert(ppu.ctrl == 0u);
     assert(ppu.mask == 0u);
     assert(ppu.vram_address == 0u);
+    assert(ppu.vram_temp_address == 0u);
     assert(ppu.ppuaddr_high_next);
     assert(!rp2c02_ext_rendering_enabled(&ppu));
     assert(!rp2c02_ext_palette_override_active(&ppu));
@@ -66,8 +67,20 @@ int main(void)
     assert(rp2c02_ext_palette_index_for_address(0x3f1cu) == 12u);
     assert(rp2c02_ext_palette_index_for_address(0x3f24u) == 4u);
 
+    /* The first PPUADDR write changes temporary t only. v, and therefore EXT
+       output selection, changes only after the second write copies t -> v. */
+    set_ppu_address(&ppu, 0x0000u);
+    rp2c02_ext_cpu_write(&ppu, RP2C02_REG_ADDR, 0x3fu);
+    assert(ppu.vram_address == 0x0000u);
+    assert((ppu.vram_temp_address & 0x3f00u) == 0x3f00u);
+    assert(!ppu.ppuaddr_high_next);
+    assert(!rp2c02_ext_palette_override_active(&ppu));
+    rp2c02_ext_cpu_write(&ppu, RP2C02_REG_ADDR, 0x05u);
+    assert(ppu.vram_address == 0x3f05u);
+    assert(ppu.ppuaddr_high_next);
+    assert(rp2c02_ext_palette_override_active(&ppu));
+
     /* Exercise the exact write-only register subset used by the project. */
-    set_ppu_address(&ppu, 0x3f05u);
     rp2c02_ext_cpu_write(&ppu, RP2C02_REG_DATA, 0x2au);
     assert(ppu.palette_ram[5] == 0x2au);
     assert(ppu.vram_address == 0x3f06u);
@@ -112,6 +125,6 @@ int main(void)
     rp2c02_ext_cpu_write(&ppu, RP2C02_REG_DATA, 0x12u);
     assert(ppu.vram_address == 0x3f21u);
 
-    puts("RP2C02 EXT model OK: six-bit colors, mirrors, host writes, and backdrop override");
+    puts("RP2C02 EXT model OK: six-bit colors, mirrors, host writes, PPUADDR latch, and backdrop override");
     return 0;
 }
