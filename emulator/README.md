@@ -29,7 +29,7 @@ This makes geometry, centering, duplication patterns and palette differences dir
 
 ## Current V0.2
 
-V0.2 keeps the dependency-free V0.1 path and adds a pluggable Game Boy source interface plus an optional SameBoy-backed ROM source.
+V0.2 keeps the dependency-free V0.1 path and adds a pluggable Game Boy source interface, optional SameBoy-backed ROM source, a shared comparison renderer, and an optional SDL2 live viewer.
 
 Implemented now:
 
@@ -41,8 +41,10 @@ Implemented now:
 - generic `gb_source` interface;
 - optional SameBoy source using the normal SameBoy framebuffer as the left reference;
 - recovery of the four final DMG shade indices from that same SameBoy frame for the right-hand bridge path;
-- 1280x720 side-by-side comparison renderer that writes a PPM image;
-- automated bridge-geometry regression test.
+- shared 1280x720 side-by-side comparison renderer;
+- dependency-free PPM frontend;
+- optional live SDL2 frontend;
+- automated bridge-geometry and source-abstraction regression tests.
 
 The RGB LUT in `rp2c02_ext.c` is **only a provisional monitor approximation**. It is not yet a composite NTSC waveform model.
 
@@ -57,7 +59,7 @@ ctest --test-dir build/emulator --output-on-failure
 ./build/emulator/gbcrt_emu --out build/emulator/comparison.ppm
 ```
 
-This uses the built-in two-bit pattern source and does not require SameBoy.
+This uses the built-in two-bit pattern source and does not require SameBoy or SDL2.
 
 ## SameBoy-backed ROM build
 
@@ -96,6 +98,40 @@ Run a user-supplied ROM and DMG boot ROM:
 No commercial ROM or Nintendo boot ROM is stored in this repository.
 
 SameBoy itself contains open boot-ROM source, so a later integration may switch to a reproducibly built SameBoy boot ROM instead of requiring a user-supplied Nintendo image. That is intentionally kept separate from the first source-adapter step.
+
+## Optional live SDL2 viewer
+
+The live viewer is not required for tests or the PPM frontend. On a system with SDL2 development files installed, configure with:
+
+```sh
+cmake -S emulator -B build/emulator-viewer \
+  -DGBCRT_ENABLE_SDL2=ON
+cmake --build build/emulator-viewer
+./build/emulator-viewer/gbcrt_viewer
+```
+
+For the live SameBoy comparison, enable both optional integrations:
+
+```sh
+cmake -S emulator -B build/emulator-live \
+  -DGBCRT_ENABLE_SDL2=ON \
+  -DGBCRT_ENABLE_SAMEBOY=ON \
+  -DSAMEBOY_ROOT="$PWD/emulator/third_party/SameBoy"
+cmake --build build/emulator-live
+
+./build/emulator-live/gbcrt_viewer \
+  --rom /path/to/game.gb \
+  --boot /path/to/dmg_boot.bin
+```
+
+Viewer controls in the first implementation:
+
+- `Esc` or `Q`: quit;
+- `Space`: pause/resume.
+
+The window title reports the source and frame number. Joypad input and in-canvas text/metrics are intentionally deferred to the next frontend pass.
+
+The SDL2 source is optional because the current automated build verification environment does not have SDL2 development files installed. The dependency-free renderer/tests remain the mandatory baseline.
 
 ## Why the first SameBoy adapter works at frame level
 
