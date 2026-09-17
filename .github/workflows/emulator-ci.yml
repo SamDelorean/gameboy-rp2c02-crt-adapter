@@ -41,7 +41,7 @@ jobs:
             --frames 1000 \
             --out build/emulator/comparison-stock-dmg.ppm
 
-      - name: Exercise stock SGB drift path
+      - name: Exercise externally-clocked SGB stock path
         run: |
           ./build/emulator/gbcrt_emu \
             --source-model sgb \
