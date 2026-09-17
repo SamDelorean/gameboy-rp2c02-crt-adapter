@@ -118,13 +118,13 @@ front framebuffer
 
 That engine will replace the current static EXT test value. It must be tied to measured/validated RP2C02 raster timing rather than implemented with `digitalWrite()` at pixel rate.
 
-Optional SGB-lite `P14/P15` palette-command decoding now has a first firmware implementation. It is compile-time disabled by default (`GBCRT_ENABLE_SGB_LITE=0`) so unconnected/floating P14/P15 cannot disturb the baseline. When enabled on a wired SGB installation, GPIO-change interrupts enqueue passive line-state transitions; foreground code accepts only one-packet PAL01/PAL23/PAL03/PAL12 commands, translates their four RGB555 colors to RP2C02 codes, caches the result, and makes it visible only in AUTO/SGB at the normal VBlank palette boundary. Regional attributes, borders and active JOYP behavior remain deliberately absent. Physical P14/P15 edge timing and interrupt margin are still bench-validation items.
+SGB `P14/P15` palette-command decoding remains a later optional module.
 
 ## Compatibility target
 
 Firmware uses a common **Game Boy DMG / SGB** source pipeline. Once a valid 160x144x2-bit frame is reconstructed, buffering, scaling, border generation, palette mapping and RP2C02 EXT output are common to both source families.
 
-SGB-specific `P14/P15` packet decoding remains separate, optional, and compile-time disabled unless the taps are actually wired.
+SGB-specific `P14/P15` packet decoding remains separate and optional.
 
 ## Constraints
 

@@ -1,11 +1,6 @@
 #include <Arduino.h>
 
 #include "gb_capture_engine.h"
-#include "sgb_lite_palette.h"
-
-#ifndef GBCRT_ENABLE_SGB_LITE
-#define GBCRT_ENABLE_SGB_LITE 0
-#endif
 
 /*
  * Game Boy DMG / SGB -> RP2350/Pico 2 -> RP2C02 CRT Adapter
@@ -111,41 +106,9 @@ static bool buttonLastRawPressed = false;
 static uint32_t buttonLastChangeMs = 0;
 constexpr uint32_t BUTTON_DEBOUNCE_MS = 30;
 
-#if GBCRT_ENABLE_SGB_LITE
-constexpr uint16_t SGB_EVENT_QUEUE_SIZE = 512; // power of two
-static volatile uint8_t sgbEventQueue[SGB_EVENT_QUEUE_SIZE];
-static volatile uint16_t sgbEventHead = 0;
-static volatile uint16_t sgbEventTail = 0;
-static volatile uint8_t sgbLastSignal = 0xffu;
-static volatile bool sgbEventOverflow = false;
-static gbcrt_sgb_lite_decoder_t sgbDecoder;
-#endif
-
 void onPpuVblank() {
   ++ppuVblankCounter;
 }
-
-#if GBCRT_ENABLE_SGB_LITE
-static inline uint8_t readSgbSignal() {
-  const uint8_t p14 = digitalRead(hw::P14) == HIGH ? 1u : 0u;
-  const uint8_t p15 = digitalRead(hw::P15) == HIGH ? 2u : 0u;
-  return static_cast<uint8_t>(p14 | p15);
-}
-
-void onSgbLineChange() {
-  const uint8_t signal = readSgbSignal();
-  if (signal == sgbLastSignal) return;
-  sgbLastSignal = signal;
-
-  const uint16_t next = static_cast<uint16_t>((sgbEventHead + 1u) & (SGB_EVENT_QUEUE_SIZE - 1u));
-  if (next == sgbEventTail) {
-    sgbEventOverflow = true;
-    return;
-  }
-  sgbEventQueue[sgbEventHead] = signal;
-  sgbEventHead = next;
-}
-#endif
 
 static inline uint8_t packedGetPixel(const uint8_t *frame, uint16_t x, uint16_t y) {
   const size_t pixel = static_cast<size_t>(y) * video::SOURCE_W + x;
@@ -302,12 +265,6 @@ static void configurePins() {
 
   pinMode(hw::P14, INPUT);
   pinMode(hw::P15, INPUT);
-#if GBCRT_ENABLE_SGB_LITE
-  gbcrt_sgb_lite_reset(&sgbDecoder);
-  sgbLastSignal = readSgbSignal();
-  attachInterrupt(digitalPinToInterrupt(hw::P14), onSgbLineChange, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(hw::P15), onSgbLineChange, CHANGE);
-#endif
 
   pinMode(hw::EXT0_D0, OUTPUT);
   pinMode(hw::EXT1_D1, OUTPUT);
@@ -404,55 +361,9 @@ static void extOutputEngineService() {
 }
 
 static void sgbListenerService() {
-#if GBCRT_ENABLE_SGB_LITE
-  bool overflow = false;
-  noInterrupts();
-  overflow = sgbEventOverflow;
-  sgbEventOverflow = false;
-  interrupts();
-
-  if (overflow) {
-    noInterrupts();
-    sgbEventTail = sgbEventHead;
-    interrupts();
-    gbcrt_sgb_lite_reset(&sgbDecoder);
-    Serial.println("SGB-lite: edge queue overflow; decoder resynchronized");
-  }
-
-  while (true) {
-    uint8_t signal = 0;
-    noInterrupts();
-    if (sgbEventTail == sgbEventHead) {
-      interrupts();
-      break;
-    }
-    signal = sgbEventQueue[sgbEventTail];
-    sgbEventTail = static_cast<uint16_t>((sgbEventTail + 1u) & (SGB_EVENT_QUEUE_SIZE - 1u));
-    interrupts();
-
-    if (!gbcrt_sgb_lite_feed_signal(&sgbDecoder, signal)) continue;
-
-    uint8_t translated[4];
-    gbcrt_sgb_translate_palette(sgbDecoder.palette_rgb555, translated);
-    for (uint8_t shade = 0; shade < 4u; ++shade) {
-      cachedSgbPalette.color[shade] = translated[shade];
-    }
-    cachedSgbValid = true;
-
-    // Cache every valid SGB palette, but only make it visible in AUTO/SGB.
-    if (paletteMode == 0u) palettePending = true;
-
-    Serial.print("SGB-lite PAL command 0x");
-    Serial.print(sgbDecoder.last_command_id, HEX);
-    Serial.print(" -> RP2C02:");
-    for (uint8_t shade = 0; shade < 4u; ++shade) {
-      Serial.print(" $");
-      if (cachedSgbPalette.color[shade] < 0x10u) Serial.print('0');
-      Serial.print(cachedSgbPalette.color[shade], HEX);
-    }
-    Serial.println();
-  }
-#endif
+  // TODO later: passive P14/P15 decoder for PAL01/PAL23/PAL03/PAL12.
+  // When valid, populate cachedSgbPalette and set cachedSgbValid=true.
+  // Never alter visible palette while a manual mode is selected.
 }
 
 void setup() {
@@ -461,11 +372,6 @@ void setup() {
   Serial.println();
   Serial.println("Game Boy RP2C02 CRT Adapter firmware V0.2");
   Serial.println("Target: Raspberry Pi Pico 2 / RP2350");
-#if GBCRT_ENABLE_SGB_LITE
-  Serial.println("SGB-lite: passive P14/P15 PALxx listener ENABLED");
-#else
-  Serial.println("SGB-lite: disabled (manual/AUTO fallback palettes unaffected)");
-#endif
 
   configurePins();
   buildScalerTables();
