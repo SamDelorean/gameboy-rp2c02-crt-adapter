@@ -60,4 +60,8 @@ if(BUILD_TESTING)
     add_executable(test_bridge tests/test_bridge.c)
     target_link_libraries(test_bridge PRIVATE gbcrt_core)
     add_test(NAME bridge_geometry COMMAND test_bridge)
+
+    add_executable(test_source tests/test_source.c)
+    target_link_libraries(test_source PRIVATE gbcrt_core)
+    add_test(NAME source_abstraction COMMAND test_source)
 endif()
