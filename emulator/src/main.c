@@ -147,9 +147,20 @@ int main(int argc, char **argv)
 
     rp2c02_ext_t ppu;
     rp2c02_ext_reset(&ppu);
-    const unsigned palette_index = 0u;
-    adapter_palette_apply(&ppu, palette_index);
-    const adapter_palette_preset_t *palette = adapter_palette_get(palette_index);
+
+    char palette_label[80];
+    const adapter_palette_preset_t *fallback = adapter_palette_get(0u);
+    if (frame.sgb_palette_valid) {
+        adapter_palette_apply_sgb_rgb555(&ppu, frame.sgb_palette_rgb555);
+        snprintf(palette_label, sizeof(palette_label),
+                 "AUTO/SGB PAL%02X", frame.sgb_palette_command);
+    }
+    else {
+        adapter_palette_apply(&ppu, 0u);
+        snprintf(palette_label, sizeof(palette_label),
+                 "AUTO/SGB FALLBACK %s",
+                 fallback ? fallback->name : "PALETTE");
+    }
 
     rgb8_t *canvas = calloc((size_t)COMPARISON_W * COMPARISON_H, sizeof(*canvas));
     if (!canvas) {
@@ -165,7 +176,7 @@ int main(int argc, char **argv)
         .menu_selection = (int)clock_mode,
         .paused = 0,
         .source_name = source_name,
-        .palette_name = palette ? palette->name : "unknown",
+        .palette_name = palette_label,
     };
     comparison_render(canvas, &frame, ext, &ppu, &view);
 
@@ -188,8 +199,10 @@ int main(int argc, char **argv)
            gbcrt_gb_clock_hz(clock_mode, source_model),
            gbcrt_gb_frame_hz(clock_mode, source_model),
            gbcrt_ppu_frame_hz());
-    printf("palette: %s; border EXT index: %u -> $0F black\n",
-           palette ? palette->name : "unknown",
+    printf("palette: %s; SGB valid=%u sequence=%llu; border EXT index: %u -> $0F black\n",
+           palette_label,
+           frame.sgb_palette_valid ? 1u : 0u,
+           (unsigned long long)frame.sgb_palette_sequence,
            BRIDGE_BORDER_EXT_INDEX);
     printf("left: source reference 160x144; right: RP2C02 EXT path 256x240\n");
     return 0;
