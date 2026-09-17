@@ -10,6 +10,7 @@ option(GBCRT_ENABLE_SDL2 "Build the optional live SDL2 comparison viewer" OFF)
 set(SAMEBOY_ROOT "" CACHE PATH "Path to a SameBoy checkout with build/lib/libsameboy.a")
 
 add_library(gbcrt_core
+    src/adapter_palette.c
     src/bridge.c
     src/clock_mode.c
     src/rp2c02_ext.c
@@ -88,6 +89,10 @@ if(BUILD_TESTING)
     add_executable(test_rp2c02_ext tests/test_rp2c02_ext.c)
     target_link_libraries(test_rp2c02_ext PRIVATE gbcrt_core)
     add_test(NAME rp2c02_ext_palette COMMAND test_rp2c02_ext)
+
+    add_executable(test_adapter_palette tests/test_adapter_palette.c)
+    target_link_libraries(test_adapter_palette PRIVATE gbcrt_core)
+    add_test(NAME adapter_palette_presets COMMAND test_adapter_palette)
 
     add_executable(test_rp2c02_timing tests/test_rp2c02_timing.c)
     target_link_libraries(test_rp2c02_timing PRIVATE gbcrt_core)
