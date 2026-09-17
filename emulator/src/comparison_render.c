@@ -1,5 +1,8 @@
 #include "comparison_render.h"
 #include "rp2c02_timing.h"
+#ifdef GBCRT_ENABLE_NESEMU_PPU
+#include "rp2c02_nesemu.h"
+#endif
 #include "ui_font.h"
 
 #include <stddef.h>
@@ -140,13 +143,31 @@ static void draw_rp2c02_frame(rgb8_t *canvas,
                               const uint8_t ext[PPU_ACTIVE_H][PPU_ACTIVE_W],
                               const rp2c02_ext_t *ppu)
 {
+#ifdef GBCRT_ENABLE_NESEMU_PPU
+    uint8_t code[PPU_ACTIVE_H][PPU_ACTIVE_W];
+    if (rp2c02_nesemu_render(ext, ppu, code) == 0) {
+        for (unsigned y = 0; y < PPU_ACTIVE_H; ++y) {
+            for (unsigned x = 0; x < PPU_ACTIVE_W; ++x) {
+                rect(canvas,
+                     rx + x * scale,
+                     ry + y * scale,
+                     scale,
+                     scale,
+                     rp2c02_demo_rgb(code[y][x]));
+            }
+        }
+        return;
+    }
+#endif
+
     rp2c02_timing_t timing;
     rp2c02_timing_reset(&timing);
 
     /*
-     * Walk one complete 341x262 rendering-disabled RP2C02 frame. Only the
-     * 256x240 visible dots paint the comparison surface, but blanking and
-     * VBlank consume their real positions in the timing model.
+     * Dependency-free fallback: walk one complete 341x262 rendering-disabled
+     * RP2C02 frame. When the donor PPU is enabled, the preview above is sourced
+     * from johnmph/NESEmu instead and this reduced path remains as a regression
+     * oracle and no-dependency build option.
      *
      * Color selection goes through the rendering-disabled hardware rule, not
      * directly through palette RAM: EXT selects the backdrop palette entry
