@@ -19,8 +19,9 @@ typedef struct {
     uint8_t palette_ram[32];
     uint8_t ctrl;
     uint8_t mask;
-    uint16_t vram_address;
-    bool ppuaddr_high_next;
+    uint16_t vram_address;      /* internal v */
+    uint16_t vram_temp_address; /* internal t, reduced to address-relevant bits */
+    bool ppuaddr_high_next;     /* internal w latch for the write-only subset */
 } rp2c02_ext_t;
 
 typedef struct {
