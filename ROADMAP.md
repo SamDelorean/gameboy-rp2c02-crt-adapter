@@ -1,194 +1,105 @@
 # Roadmap
 
-## Cross-cutting compatibility target — Game Boy DMG / SGB
+This roadmap separates the **completed software proof of concept** from any future physical-hardware program.
 
-The project is planned from the beginning as a **Game Boy DMG / SGB** video adapter rather than a DMG-only design with SGB support added later.
+## Milestone A — Hybrid emulator proof of concept — COMPLETE
 
-The common baseline is the Game Boy-compatible LCD/video source path. Wherever the required LCD data/timing signals and clock access are available, the same capture, buffering, scaling, palette and RP2C02 output architecture should be reusable.
+The software PoC is complete when the following are reproducible from the public repository:
 
-SGB-specific palette signaling is an additional optional layer:
+- SameBoy executes the Game Boy workload.
+- The project recovers the final four logical Game Boy shades.
+- The fixed bridge produces a 234×240 image with 11-dot black side borders.
+- A pinned Ricoh 2C02 implementation from johnmph/NESEmu consumes the EXT/palette path.
+- The normal Game Boy reference and RP2C02 path can be viewed side by side.
+- STOCK and SYNC clock models are available.
+- Manual palettes and the palette editor work.
+- SameBoy-provided simple SGB palette state can drive AUTO/SGB.
+- Copyright-clean smoke tests exercise both DMG and SGB paths.
+- CI validates core, SDL2, NESEmu, and SameBoy+NESEmu configurations.
 
-- reserve/passively observe `P14/P15` where available;
-- support lightweight SGB palette recovery without making it mandatory for basic video;
-- keep manual palette control fully functional;
-- do not require full SGB emulation for version 1.
+This milestone is the target of the `v0.1.0-poc` release.
 
-Every major hardware, firmware and validation phase below should therefore consider both DMG and SGB-capable source configurations where practical.
+## Milestone B — PoC maintenance — OPTIONAL
 
-## Phase 1 — Digital controller — COMPLETE AT DESIGN LEVEL
+Only changes that materially improve reproducibility or fix defects are required after the PoC release.
 
-**V1 decision: RP2350, with Raspberry Pi Pico 2 as the preferred prototype/module implementation.**
+Possible maintenance work:
 
-The selected baseline satisfies:
+- portability fixes for additional Linux distributions;
+- clearer dependency/bootstrap diagnostics;
+- viewer usability fixes;
+- test coverage for newly discovered regressions;
+- improved RP2C02 desktop color reference if a better measured/modelled basis is adopted.
 
-- sufficient SRAM for the two 160x144x2-bit source framebuffers;
-- enough GPIO for the optimized direct DMG/SGB interface;
-- PIO + DMA for deterministic capture/output;
-- 5 V-tolerant digital inputs on the appropriate RP2350 GPIO, reducing blanket level-shifting hardware;
-- simple Arduino-Pico/USB development workflow.
+Fine palette tuning is not a release blocker.
 
-The earlier RP2040 / Raspberry Pi Pico candidate is retained only as historical comparison and is not an open design choice.
+## Milestone C — Physical RP2C02 EXT validation — FUTURE
 
-Bench validation of pin loading, voltage thresholds and timing is still required before PCB freeze.
+If the hardware project resumes, first prove the PPU concept independently of Game Boy capture:
 
-## Phase 2 — Freeze the common clock source — OPEN
+- reset and minimally initialize a real RP2C02 or candidate compatible PPU;
+- write known palette values;
+- drive static and changing EXT0..EXT3 patterns;
+- verify visible composite output;
+- verify VBlank and register behavior;
+- document clone compatibility with measurements.
 
-Working targets:
+Emulator agreement is useful evidence but does not substitute for this bench test.
 
-- RP2C02 master: ~21.4772727 MHz,
-- modified Game Boy source clock: ~4.2203555 MHz.
+## Milestone D — Common-clock validation — FUTURE
 
-Both clocks should be derived from one reference to eliminate long-term relative drift.
+Validate a common reference that can generate approximately:
 
-The common-reference architecture is SET. Si5351A remains proposal 1; the exact generator IC and output conditioning remain open pending frequency/jitter/edge-quality validation.
+- RP2C02 master: 21.4772727 MHz
+- synchronized Game Boy source: 4.2203555 MHz
 
-The final clock-interface design must document the physical injection/isolation point for the actual DMG and each SGB source hardware revision used for validation. SGB external clock replacement itself is already treated as an established project design principle.
+The current Si5351A calculation remains a candidate implementation, not a hardware-validated release requirement.
 
-## Phase 3 — Prove the PPU EXT concept on the bench — PENDING BENCH
+## Milestone E — Game Boy signal capture — FUTURE
 
-Before integrating Game Boy hardware:
+Validate the physical Game Boy LCD interface:
 
-- reset and minimally initialize the PPU,
-- write known palette values,
-- drive static `EXT0..EXT3` patterns,
-- verify composite output,
-- verify `/INT` / VBlank behavior,
-- document oscilloscope captures and CRT/capture images.
+- LD0
+- LD1
+- CP
+- CPL
+- ST
+- S
 
-The V0.2 firmware already provides the low-rate PPU initialization/palette path and static EXT test state needed for this bring-up.
+Measure sampling phase, polarity, voltage/loading, line/frame boundaries, and behavior across representative rendering cases.
 
-This test will become the basis of the clone-PPU compatibility matrix.
+The physical implementation should preserve the already-proven logical image contract while remaining independent of the desktop-emulator implementation.
 
-## Phase 4 — Capture the Game Boy LCD stream — THEORETICAL V0.2 IMPLEMENTED / BENCH PENDING
+## Milestone F — Minimal hardware buffering/scaling — FUTURE
 
-Firmware V0.2 now contains a PIO + DMA capture engine based on documented DMG LCD behavior. It reconstructs the 160x144x2-bit source frame into BACK while preserving FRONT/BACK ownership.
+The authoritative physical buffering target is a **minimal two-line working buffer/register**, sufficient to support the fixed scaling operation.
 
-Bench work must validate the actual electrical/timing behavior of:
+Do not treat earlier full-frame ping-pong framebuffer experiments as a current architectural requirement.
 
-- `LD0`
-- `LD1`
-- `CP`
-- `CPL`
-- `ST`
-- `S`
+Preserve the fixed PoC geometry:
 
-Confirm polarity, sampling phase, active-pixel behavior, line boundary, frame boundary, fine-scroll/suppressed-clock cases and electrical levels on real DMG hardware first.
+- 160×144 source
+- 234×240 image
+- 11-dot black side borders
+- no general-purpose scaler
 
-Then verify that an available SGB/SGB-CPU-compatible source exposes an equivalent usable capture path, documenting any pinout, loading, level or timing differences rather than assuming identity.
+## Milestone G — Physical SGB palette input — OPTIONAL/FUTURE
 
-See `firmware/capture-engine.md`.
+The software PoC does not implement P14/P15 transport. It uses SGB palette state already decoded by SameBoy.
 
-## Phase 5 — Ping-pong buffering — IMPLEMENTED IN V0.2 / VALIDATION PENDING
+If physical SGB palette recovery is ever revisited, it should remain an optional layer that can provide one simple global four-color palette without changing the main video path. Regional attributes, graphical borders, and full SGB emulation remain out of scope.
 
-The firmware allocates complete 160x144x2-bit FRONT/BACK frames:
+## Milestone H — Reproducible hardware release — FUTURE
 
-- 5,760 bytes per frame,
-- 11,520 bytes total for two buffers.
+Only after real-hardware validation should a hardware release include:
 
-A BACK buffer awaiting PPU VBlank presentation is never overwritten; a newer raw capture is dropped instead.
+- validated schematics;
+- KiCad sources;
+- BOM;
+- clock and power details;
+- measured PPU/EXT behavior;
+- installation/signal-access documentation;
+- compatibility matrix;
+- manufacturing outputs where appropriate.
 
-The framebuffer format and capture/output pipeline remain source-agnostic so the same code path can serve DMG and validated SGB-compatible sources.
-
-## Phase 6 — Aspect-correct fixed scaling — ALGORITHM/TABLES IMPLEMENTED / EXT ENGINE PENDING
-
-Baseline presentation:
-
-```text
-PPU raster: 256 x 240
-11 border + 234-dot Game Boy image + 11 border
-```
-
-Scaling rules:
-
-- vertical `144 -> 240` using exact `5/3` repetition,
-- horizontal `160 -> 234` using deterministic integer nearest-neighbor repetition,
-- 74 source-pixel duplications per line,
-- no scaled framebuffer,
-- no interpolation,
-- no tearing.
-
-Firmware V0.2 generates and self-checks the repetition tables. The remaining work is to consume FRONT through the deterministic EXT PIO/DMA output engine.
-
-## Phase 7 — Add curated palette presets and border generator — PARTIAL
-
-- one momentary button,
-- initially 8 or 16 useful global palettes,
-- VBlank-safe updates,
-- border generator integrated with the output path,
-- fixed black 11-dot side borders for the first release.
-
-The button state machine and provisional bring-up palettes exist in firmware V0.2. Final curated palette values and the deterministic EXT/border output engine remain pending.
-
-The border block remains logically independent so later simple color/effect experiments do not alter scaling or framebuffer logic.
-
-## Phase 8 — Validate SGB compatibility and add SGB-lite listening
-
-Treat SGB as an explicit compatibility target, not merely a late optional feature.
-
-Validate the common video path first, then passively monitor optional `P14/P15` and initially support direct palette commands:
-
-- `PAL01`
-- `PAL23`
-- `PAL03`
-- `PAL12`
-
-Tasks:
-
-- document the SGB source hardware/configuration used,
-- verify the Game Boy video capture path,
-- verify synchronized clock operation and exact physical injection point,
-- capture raw `P14/P15` traffic,
-- decode supported packets,
-- convert RGB555 colors to a suitable RP2C02 palette,
-- verify one-button manual override,
-- document games/configurations that do and do not emit usable passive SGB palette traffic.
-
-Full SGB emulation, spatial attributes and graphical SGB borders remain outside version 1.
-
-## Phase 9 — Freeze the integrated schematic
-
-Publish and review:
-
-- power/decoupling,
-- Game Boy DMG / SGB source input conditioning,
-- common clock generation,
-- RP2350/Pico 2 controller/programming,
-- RP2C02 control bus,
-- `EXT0..EXT3`,
-- composite output,
-- optional `P14/P15` SGB header/test points,
-- palette button,
-- debug/test points.
-
-The V0.1 central interconnect is already documented; this phase closes the remaining clock, power and output sheets and converts the design to production-ready KiCad sources.
-
-## Phase 10 — Prototype and validate
-
-Document reproducibly:
-
-- clock measurements,
-- DMG LCD captures,
-- SGB-compatible source captures where hardware is available,
-- aspect-correct scaling geometry,
-- test patterns,
-- palette/manual override behavior,
-- passive SGB palette behavior,
-- composite waveform,
-- CRT photographs,
-- clone-PPU results,
-- known limitations.
-
-## Phase 11 — Reproducible hardware release
-
-Release:
-
-- KiCad project sources,
-- BOM,
-- fabrication outputs,
-- firmware source and binaries,
-- Arduino-Pico programming instructions,
-- DMG installation guide,
-- SGB/SGB-CPU installation or signal-access notes for validated configurations,
-- validation procedure,
-- compatibility matrix,
-- finalized licensing notices.
+The software PoC can remain complete independently of these future milestones.

@@ -1,179 +1,162 @@
 # Game Boy RP2C02 CRT Adapter
 
-An open hardware and firmware project for **Game Boy DMG / SGB** systems, intended to display the Game Boy video output on a television/CRT by using the video PPU from the original **Nintendo Entertainment System / NES** (**RP2C02**) as the final NTSC video generator.
+A proof-of-concept project that explores an alternate Game Boy video path using a **real NES-style RP2C02 color/raster model** as the final palette and display stage.
 
-In simple terms, the project takes the Game Boy's LCD pixel data, adapts and scales it digitally, and feeds it to the NES video chip so that the Game Boy image can be displayed as standard composite NTSC video on a television. The same basic video path is intended to support both normal Game Boy DMG use and SGB-capable configurations, while Super Game Boy palette features remain an optional lightweight extension.
+The current public milestone is the **hybrid software virtual bench**. It runs Game Boy software through SameBoy, applies the project's fixed 160×144 → 234×240 bridge, and previews the result through a pinned Ricoh 2C02 implementation from johnmph/NESEmu.
 
-Two additional goals are central to the design:
+> **Current release scope:** software proof of concept. Physical RP2C02/CRT hardware validation is future work and is not required to reproduce the software result.
 
-- provide **changeable color palettes**, including user-selected presets and optional palette information recovered from compatible Super Game Boy signaling;
-- make the Game Boy image fill essentially the full useful CRT height **without distorting its original aspect ratio**, using a deliberately simple fixed repetition algorithm instead of a complex general-purpose scaler.
-
-The baseline presentation is approximately **234 x 240 image dots inside the PPU's 256 x 240 active raster**, with **11 black dots on each side**. This avoids stretching the Game Boy picture across the full 4:3 raster width and preserves its intended geometry much more closely.
-
-The NES PPU therefore serves not only as the television-signal generator, but also as the final color/palette stage for the four original Game Boy shades.
-
-> **Project status:** central architecture and controller selection are fixed; firmware V0.2 and the V0.1 interconnect schematic are implemented at design/pre-bench level. Bench electrical/timing validation, the common clock circuit, EXT output engine, final video-output stage and production PCB remain pending.
-
-## Concept
+## What the PoC proves
 
 ```text
-Game Boy DMG / SGB
-        |
-        | LD0, LD1, CP, CPL, ST, S
-        v
-+------------------------------+
-| RP2350 / Raspberry Pi Pico 2 |
-| capture + ping-pong buffers  |
-| aspect-correct fixed scaler  |
-| 160x144 -> 234x240           |
-| 11 black + image + 11 black  |
-| palette translation          |
-+------------------------------+
-        |
-        | EXT0..EXT3
-        v
- NES / Nintendo video PPU
-       (RP2C02)
-        |
-        | composite NTSC
-        v
-   television / CRT
+SameBoy
+  |
+  | 160x144 Game Boy image / 4 logical shades
+  v
+project bridge
+  |
+  | fixed 160x144 -> 234x240 scaling
+  | 11 black dots + 234 image dots + 11 black dots
+  | global 4-color palette mapping
+  v
+RP2C02 preview backend
+  |
+  | pinned johnmph/NESEmu Ricoh2C02 implementation
+  | native 6-bit PPU color codes
+  v
+SDL2 / PPM comparison output
 ```
 
-A common frequency reference is planned for both the PPU and a modified Game Boy clock so that the two frame domains remain locked rather than free-running.
+The left side of the viewer is the normal SameBoy reference. The right side is the same Game Boy image after the project bridge and RP2C02 path.
 
-## Current architecture decisions
+## Implemented in the PoC
 
-- NTSC **RP2C02 or functionally compatible discrete clone PPU** as the final video stage.
-- **RP2350** controller family selected for V1; **Raspberry Pi Pico 2** is the preferred prototype/module implementation.
-- **Arduino IDE + Arduino-Pico** selected as the practical V1 development environment.
-- Direct capture of the DMG LCD interface: `LD0`, `LD1`, `CP`, `CPL`, `ST`, and `S`.
-- Firmware V0.2 contains the theoretical PIO + DMA Game Boy capture engine; bench timing validation is still required.
-- Two complete 160x144x2-bit framebuffers (11,520 bytes total) for robust ping-pong operation.
-- Fixed vertical scaling from 144 to 240 using the exact `5/3` repetition relationship.
-- Fixed horizontal scaling from 160 to 234 using deterministic integer nearest-neighbor repetition; each source pixel is emitted once or twice.
-- Fixed 11-dot black pillarbox bars on the left and right to preserve the Game Boy picture proportions.
-- No required 234x240 or 256x240 intermediate framebuffer in the baseline design.
-- Scaling is intentionally simple and deterministic; no general-purpose video scaler is required.
-- RP2C02 normal tile/sprite rendering disabled for the first implementation.
-- External palette indices driven through `EXT0..EXT3`.
-- PPU host interface minimized without extra latch ICs: write-only bus, `R/W` fixed low, A1/A2 tied together, and MCU `EXT0..EXT3` GPIO reused for PPU `D0..D3`.
-- One button cycles curated global four-color palettes.
-- Optional SGB-derived palettes may be received automatically, but the user can always override them with the same button.
-- No game database, no cartridge identification, and no regional colorization in version 1.
-- Early experiments should preferentially use DMG donor units with LCDs that are no longer reasonably repairable, while preserving restorable consoles.
+- SameBoy as the Game Boy CPU/memory/cartridge/LCD source.
+- Fixed horizontal scaling `160 -> 234`.
+- Exact vertical scaling `144 -> 240` using the `2,1,2` repetition pattern.
+- Fixed `11 + 234 + 11` output geometry inside the PPU's 256-pixel visible width.
+- Black side borders independent of the four Game Boy shades.
+- Reduced project RP2C02 model for dependency-free regression tests.
+- Optional pinned **johnmph/NESEmu Ricoh2C02** backend for the preferred preview.
+- `STOCK` and synchronized `SYNC` Game Boy clock models.
+- 16 candidate global manual RP2C02 palettes.
+- Interactive SDL2 palette editor.
+- SGB palette support limited to one already-decoded four-color RGB555 palette supplied by SameBoy.
+- Project-authored boot stub and smoke ROM for copyright-clean CI.
+- CI coverage for dependency-free, SDL2, donor-PPU, and SameBoy+donor-PPU builds.
 
-The canonical scaling derivation and algorithm are documented in [`docs/scaling.md`](docs/scaling.md). The consolidated decision record is maintained in [`docs/design-decisions.md`](docs/design-decisions.md), and the controller/IO plan is documented in [`docs/controller-selection.md`](docs/controller-selection.md).
+## SGB scope
 
-## Working clock targets
+The project does **not** implement P14/P15/JOYP transport in the virtual bench.
 
-- RP2C02 master clock: approximately **21.4772727 MHz**.
-- Modified Game Boy source clock: approximately **4.2203555 MHz**.
+SameBoy interprets SGB protocol behavior. The project receives only the resulting simple four-color RGB555 palette and translates those four entries to RP2C02 color codes for `AUTO/SGB`.
 
-Both should be derived from one reference so that one Game Boy source frame corresponds temporally with one simplified PPU output frame, avoiding a generalized asynchronous frame-rate-conversion subsystem.
+Not implemented:
 
-## Controller selection
+- SGB regional attributes
+- graphical borders
+- tile transfers
+- game identification
+- regional/game database colorization
+- full SGB emulation
 
-The V1 controller decision is **RP2350**, with **Raspberry Pi Pico 2** as the preferred prototype module.
+## Build the complete PoC
 
-The choice is driven mainly by system simplicity rather than raw performance: RP2350 keeps PIO + DMA while current digital GPIO can tolerate 5 V when correctly powered. That can remove the blanket level-shifting stage that an RP2040 implementation would need for the 5 V Game Boy LCD signals.
+Requirements on Linux:
 
-The earlier Pico 2/RP2350 direct-interface study is retained as hardware prototype documentation, but it is not part of the current emulator contract.
+- Git
+- CMake
+- C and C++ toolchains
+- Make
+- SDL2 development files
+- Clang for the pinned SameBoy core build
 
-See [`docs/controller-selection.md`](docs/controller-selection.md) and [`hardware/interfaces.md`](hardware/interfaces.md).
+From the repository root:
 
-## Firmware status
+```sh
+sh ./emulator/scripts/bootstrap_sameboy.sh
+sh ./emulator/scripts/bootstrap_nesemu.sh
 
-The current source tree is **firmware V0.2**, built for Arduino IDE + Arduino-Pico on Raspberry Pi Pico 2 / RP2350.
+cmake -S emulator -B build/poc \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DGBCRT_ENABLE_SDL2=ON \
+  -DGBCRT_ENABLE_SAMEBOY=ON \
+  -DSAMEBOY_ROOT="$PWD/emulator/third_party/SameBoy" \
+  -DGBCRT_ENABLE_NESEMU_PPU=ON \
+  -DNESEMU_ROOT="$PWD/emulator/third_party/NESEmu"
 
-Implemented at design level:
-
-- PPU initialization and palette writes;
-- FRONT/BACK packed framebuffers;
-- scaler tables and self-checks;
-- palette-button state machine;
-- theoretical PIO + DMA Game Boy LCD capture path;
-- raw capture normalization into the 160x144x2-bit BACK framebuffer.
-
-Still pending before a validated firmware release:
-
-- real-hardware timing/electrical validation of the capture engine;
-- deterministic RP2C02 EXT PIO/DMA output engine;
-- SGB global-palette translation from SameBoy RGB555 state;
-- final curated palette table.
-
-See [`firmware/README.md`](firmware/README.md) and [`firmware/capture-engine.md`](firmware/capture-engine.md).
-
-## Palette system
-
-The four DMG shades are mapped globally to four PPU colors. The active palette is intentionally changeable rather than fixed.
-
-The V1 plan provides:
-
-- a 16-entry candidate manual palette catalog selected with one logical control;
-- optional automatic SGB-derived palette selection in the virtual bench using palette state already decoded by SameBoy;
-- immediate manual override of an SGB-derived palette by pressing the same button.
-
-Palette writes occur during VBlank/safe PPU timing.
-
-## SGB palette handling in the virtual bench
-
-SameBoy owns SGB protocol interpretation. Project code consumes only the already-decoded four-color RGB555 palette, translates it to RP2C02 color codes, and applies it globally in `AUTO/SGB`. No project-owned P14/P15/JOYP decoder, regional color attributes, or SGB graphical borders are part of the current emulator path.
-
-## PPU compatibility philosophy
-
-The project is **not tied to original Ricoh-branded RP2C02 chips**. Discrete NTSC clone PPUs salvaged from Famiclones or obtained as old stock may be usable.
-
-A candidate clone must specifically demonstrate:
-
-- usable `EXT0..EXT3` external-input operation,
-- palette RAM behavior compatible with the design,
-- suitable reset/register interface,
-- `/INT` / VBlank operation,
-- compatible NTSC raster timing,
-- stable composite output.
-
-A chip merely being able to run NES software does not prove compatibility with this unusual EXT-input use case.
-
-## Explicit non-goals for version 1
-
-- NES CPU emulation.
-- NES background/sprite graphics.
-- Game identification.
-- Multiple user-selectable scaling modes.
-- SGB regional attribute colorization.
-- SGB graphical borders.
-- Full SGB emulation.
-- Internal CRT deflection modification in this project branch.
-
-## Repository structure
-
-```text
-docs/        theory, architecture, timing, scaling, palettes, references
-hardware/    interfaces, V0.1 interconnect schematic/netlist, PCB sources later
-firmware/    Arduino-Pico source, capture engine, firmware architecture
-tests/       bench validation and compatibility procedures
+cmake --build build/poc --parallel
+ctest --test-dir build/poc --output-on-failure
 ```
 
-See [`ROADMAP.md`](ROADMAP.md) for the development sequence.
+Generate the project-authored smoke ROM:
 
-## Safety and vintage-hardware notes
+```sh
+python3 emulator/tests/generate_smoke_rom.py build/poc-smoke
+```
 
-This project interfaces with vintage ICs and modified Game Boy hardware. Always verify voltage domains, loading, clock amplitudes, and pin direction before connection.
+Run the live viewer:
 
-On stock NES hardware, the PPU EXT pins are normally grounded; they must not remain hard-grounded when externally driven.
+```sh
+./build/poc/gbcrt_viewer \
+  --source-model dmg \
+  --rom build/poc-smoke/gbcrt_smoke.gb \
+  --boot build/poc-smoke/gbcrt_boot_stub.bin \
+  --clock sync
+```
+
+For personal testing you may substitute a legally obtained Game Boy `.gb` image. No commercial ROMs are included in this repository.
+
+See [`emulator/README.md`](emulator/README.md) for detailed build variants, controls, smoke tests, SameBoy integration, and donor-PPU notes.
+
+## Viewer controls
+
+- Arrow keys: Game Boy D-pad
+- `Z`: A
+- `X`: B
+- `Backspace`: Select
+- `Enter`: Start
+- `P`: next global palette
+- `E`: palette editor
+- `M`: clock-mode menu
+- `C`: toggle STOCK/SYNC
+- `Space`: pause
+- `Q`: quit
+
+## Physical hardware status
+
+The repository also contains design research for a future physical Game Boy → RP2C02 adapter. That work is **not part of the software PoC acceptance criterion**.
+
+If physical implementation resumes, the current design principles remain:
+
+- use Game Boy LCD logical video as the image source;
+- preserve the fixed aspect-correct scaling geometry;
+- use a common clock reference to avoid long-term frame drift;
+- keep buffering minimal (the current authoritative target is a two-line working buffer rather than a full-frame ping-pong requirement);
+- drive a real RP2C02/compatible PPU as the final video/color stage;
+- validate EXT behavior, clock injection, voltage levels, and composite output on real hardware before making compatibility claims.
+
+Earlier RP2350/Arduino-Pico material is retained as historical prototype/reference work, not as a requirement of the current virtual-bench architecture.
+
+## Third-party dependencies
+
+The project pins but does not vendor:
+
+- **SameBoy** — Game Boy source core
+- **johnmph/NESEmu** — Ricoh 2C02 donor implementation used only for the PPU preview backend
+
+See [`emulator/THIRD_PARTY.md`](emulator/THIRD_PARTY.md).
 
 ## Licensing
 
-Current proposal:
+This repository uses a mixed open-source/open-hardware licensing model:
 
-- hardware: **CERN-OHL-W-2.0**,
-- firmware/software: **MIT**,
-- documentation: **CC BY-SA 4.0**.
+- software: **MIT**
+- hardware: **CERN-OHL-W-2.0**
+- documentation: **CC BY-SA 4.0**
 
-The licensing structure will be finalized before the first reproducible hardware release.
+See [`LICENSES.md`](LICENSES.md) for the exact scope and full-license locations.
 
 ## Project language
 
-The canonical technical README is in English for broader collaboration. Spanish documentation may also be maintained where useful.
+English is the canonical technical language for the public repository. A Spanish overview is maintained in [`README_ES.md`](README_ES.md).
