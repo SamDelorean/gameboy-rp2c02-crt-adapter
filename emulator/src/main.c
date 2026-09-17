@@ -152,8 +152,7 @@ int main(int argc, char **argv)
     const adapter_palette_preset_t *fallback = adapter_palette_get(0u);
     if (frame.sgb_palette_valid) {
         adapter_palette_apply_sgb_rgb555(&ppu, frame.sgb_palette_rgb555);
-        snprintf(palette_label, sizeof(palette_label),
-                 "AUTO/SGB PAL%02X", frame.sgb_palette_command);
+        snprintf(palette_label, sizeof(palette_label), "AUTO/SGB");
     }
     else {
         adapter_palette_apply(&ppu, 0u);
