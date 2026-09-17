@@ -1,0 +1,43 @@
+name: Generate SameBoy boot ROM arrays
+
+on:
+  push:
+    branches:
+      - fix/sameboy-bootrom-integration
+    paths:
+      - '.github/workflows/generate-sameboy-bootrom-arrays.yml'
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install RGBDS build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bison libpng-dev pkg-config
+
+      - name: Build pinned RGBDS
+        run: |
+          git clone --depth=1 --branch v1.0.3 https://github.com/gbdev/rgbds.git /tmp/rgbds
+          cmake -S /tmp/rgbds -B /tmp/rgbds-build -DCMAKE_BUILD_TYPE=Release
+          cmake --build /tmp/rgbds-build --parallel
+          cmake --install /tmp/rgbds-build --prefix /tmp/rgbds-install
+
+      - name: Build boot ROMs from pinned SameBoy source
+        run: |
+          git clone https://github.com/LIJI32/SameBoy.git /tmp/SameBoy
+          git -C /tmp/SameBoy checkout 213a12ce93d66b105a113debd9396306066a7cfc
+          PATH="/tmp/rgbds-install/bin:$PATH" make -C /tmp/SameBoy bootroms
+
+      - name: Emit DMG and SGB boot ROM arrays
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ("dmg_boot", "sgb_boot"):
+              data = Path(f"/tmp/SameBoy/build/bin/BootROMs/{name}.bin").read_bytes()
+              print(f"BEGIN_{name.upper()} size={len(data)}")
+              print(",".join(f"0x{b:02x}" for b in data))
+              print(f"END_{name.upper()}")
+          PY
