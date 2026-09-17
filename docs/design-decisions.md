@@ -358,6 +358,28 @@ No NES CPU, CHR graphics, nametables, OAM or sprites are required. The PPU is a 
 
 ## Software philosophy
 
+### SET — SameBoy is the Game Boy implementation for the virtual bench
+
+For emulator/virtual-bench work, reuse SameBoy as far as practical for **all Game Boy behavior**: CPU, memory, cartridge handling, LCD/PPU behavior, frame timing, joypad and normal reference rendering. The project should not create a second Game Boy emulator beside SameBoy.
+
+Project-owned emulator code should concentrate on the alternate video path:
+
+```text
+SameBoy Game Boy core
+    -> final Game Boy pixel/shade information
+    -> project scaler + border composition
+    -> RP2C02 EXT/palette/timing model
+    -> alternate CRT-path visualization
+```
+
+The current frame-level integration is therefore a valid primary implementation, not a temporary shortcut that must eventually be replaced by a home-grown Game Boy video engine.
+
+### SET — Signal-level validation must reuse or minimally extend SameBoy
+
+Exact `LD0/LD1/CP/CPL/ST/S`-style validation is optional diagnostic work, not part of the main rendering path.
+
+If signal-level validation becomes useful, prefer SameBoy's existing SFC/SNES integration hooks (`GB_set_icd_pixel_callback`, `GB_set_icd_hreset_callback`, `GB_set_icd_vreset_callback`) or a small, maintainable SameBoy hook extension. Do **not** independently reimplement the Game Boy LCD/PPU state machine merely to obtain those signals.
+
 ### SET — Keep source, framebuffer, scaler, border and palette separable
 
 ### SET — Prefer small deterministic state machines
