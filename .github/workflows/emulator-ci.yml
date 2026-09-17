@@ -137,6 +137,26 @@ jobs:
           assert bytes((0xE0, 0x50)) not in rom[0x0150:0x0300]
           PY
 
+      - name: Reject CGB-only cartridge in DMG PoC mode
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src = Path("build/emulator-smoke/gbcrt_smoke.gb").read_bytes()
+          rom = bytearray(src)
+          rom[0x143] = 0xC0
+          Path("build/emulator-smoke/gbcrt_cgb_only.gb").write_bytes(rom)
+          PY
+          if ./build/emulator-sameboy/gbcrt_emu \
+            --source-model dmg \
+            --rom build/emulator-smoke/gbcrt_cgb_only.gb \
+            --frames 1 \
+            --out build/emulator-sameboy/cgb-only.ppm \
+            2>build/emulator-sameboy/cgb-only.err; then
+            echo "CGB-only cartridge was unexpectedly accepted"
+            exit 1
+          fi
+          grep -q 'CGB-only' build/emulator-sameboy/cgb-only.err
+
       - name: Execute smoke ROM through SameBoy DMG and alternate video path
         run: |
           ./build/emulator-sameboy/gbcrt_emu \
