@@ -106,6 +106,7 @@ jobs:
             --out build/emulator-sameboy/smoke-dmg.ppm \
             | tee build/emulator-sameboy/smoke-dmg.log
           grep -q 'source: SameBoy DMG, model: DMG' build/emulator-sameboy/smoke-dmg.log
+          grep -q 'SGB valid=0 sequence=0' build/emulator-sameboy/smoke-dmg.log
           python3 emulator/tests/validate_smoke_ppm.py \
             build/emulator-sameboy/smoke-dmg.ppm
 
@@ -120,5 +121,12 @@ jobs:
             --out build/emulator-sameboy/smoke-sgb.ppm \
             | tee build/emulator-sameboy/smoke-sgb.log
           grep -q 'source: SameBoy SGB ICD, model: SGB' build/emulator-sameboy/smoke-sgb.log
+          grep -q 'palette: AUTO/SGB PAL00; SGB valid=1 sequence=1' build/emulator-sameboy/smoke-sgb.log
           python3 emulator/tests/validate_smoke_ppm.py \
+            build/emulator-sameboy/smoke-sgb.ppm
+
+      - name: Compare fallback and automatic SGB palette outputs
+        run: |
+          python3 emulator/tests/validate_sgb_auto_palette.py \
+            build/emulator-sameboy/smoke-dmg.ppm \
             build/emulator-sameboy/smoke-sgb.ppm
