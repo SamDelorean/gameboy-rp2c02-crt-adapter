@@ -1,3 +1,4 @@
+#include "adapter_palette.h"
 #include "bridge.h"
 #include "clock_mode.h"
 #include "comparison_render.h"
@@ -121,14 +122,13 @@ int main(int argc, char **argv)
     }
 
     uint8_t ext[PPU_ACTIVE_H][PPU_ACTIVE_W];
-    bridge_scale_frame(frame.shade, ext, 0u);
+    bridge_scale_frame(frame.shade, ext, BRIDGE_BORDER_EXT_INDEX);
 
     rp2c02_ext_t ppu;
     rp2c02_ext_reset(&ppu);
-    rp2c02_ext_write_palette(&ppu, 0, 0x0f);
-    rp2c02_ext_write_palette(&ppu, 1, 0x09);
-    rp2c02_ext_write_palette(&ppu, 2, 0x19);
-    rp2c02_ext_write_palette(&ppu, 3, 0x29);
+    const unsigned palette_index = 0u;
+    adapter_palette_apply(&ppu, palette_index);
+    const adapter_palette_preset_t *palette = adapter_palette_get(palette_index);
 
     rgb8_t *canvas = calloc((size_t)COMPARISON_W * COMPARISON_H, sizeof(*canvas));
     if (!canvas) {
@@ -143,6 +143,7 @@ int main(int argc, char **argv)
         .menu_selection = (int)clock_mode,
         .paused = 0,
         .source_name = source_name,
+        .palette_name = palette ? palette->name : "unknown",
     };
     comparison_render(canvas, &frame, ext, &ppu, &view);
 
@@ -163,6 +164,9 @@ int main(int argc, char **argv)
            gbcrt_gb_clock_hz(clock_mode),
            gbcrt_gb_frame_hz(clock_mode),
            gbcrt_ppu_frame_hz());
+    printf("palette: %s; border EXT index: %u -> $0F black\n",
+           palette ? palette->name : "unknown",
+           BRIDGE_BORDER_EXT_INDEX);
     printf("left: source reference 160x144; right: RP2C02 EXT path 256x240\n");
     return 0;
 }
