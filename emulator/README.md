@@ -30,7 +30,7 @@ The right panel explicitly identifies the `256x240` PPU region and the `11 + 234
 
 ## Current V0.3
 
-V0.3 keeps the dependency-free path and adds the first temporal comparison model.
+V0.3 keeps the dependency-free path and adds the first temporal and interactive comparison model.
 
 Implemented now:
 
@@ -43,12 +43,16 @@ Implemented now:
 - generic `gb_source` interface;
 - optional SameBoy source using the normal SameBoy framebuffer as the left reference;
 - recovery of the four final DMG shade indices from that same SameBoy frame for the right-hand bridge path;
+- backend-independent eight-button Game Boy joypad interface;
+- SameBoy joypad mapping through its public `GB_set_key_state()` API;
 - shared 1280x720 side-by-side renderer with framed/labelled regions;
 - dependency-free PPM frontend;
-- optional live SDL2 frontend;
+- optional playable SDL2 frontend;
 - selectable Game Boy clock model: `STOCK` or `SYNC`;
-- automated regression tests for bridge geometry, source abstraction, RP2C02 raster timing and clock scheduling;
+- automated regression tests for bridge geometry, source abstraction/joypad, RP2C02 raster timing and clock scheduling;
 - GitHub Actions build/test coverage for the dependency-free core, SDL2 viewer build and pinned SameBoy link build.
+
+The pinned SameBoy library, our adapter, and the SDL2 viewer all compile in CI. No Game Boy ROM is bundled with the project.
 
 The RGB LUT in `rp2c02_ext.c` is **only a provisional monitor approximation**. It is not yet a composite NTSC waveform model.
 
@@ -76,6 +80,8 @@ RP2C02 frame:   ~60.0984776 Hz
 The Game Boy frame rate is locked to the simplified RP2C02 frame rate, so the scheduler advances exactly one source frame for each PPU output frame.
 
 This does not change the contents of an individual Game Boy frame. It models the **temporal relationship between the two machines**.
+
+The CI timing test also executes 1000 output frames in both modes. `SYNC` produces zero repeated frames; the current `STOCK` model produces the expected periodic repeats from frame-rate drift.
 
 ## Dependency-free build
 
@@ -107,7 +113,7 @@ SameBoy is deliberately kept outside this repository. The helper script pins the
 213a12ce93d66b105a113debd9396306066a7cfc
 ```
 
-Bootstrap and build it with:
+Bootstrap and build the static core with:
 
 ```sh
 sh ./emulator/scripts/bootstrap_sameboy.sh
@@ -136,7 +142,7 @@ Run a user-supplied ROM and DMG boot ROM:
 
 No commercial ROM or Nintendo boot ROM is stored in this repository.
 
-SameBoy itself contains open boot-ROM source, so a later integration may switch to a reproducibly built SameBoy boot ROM instead of requiring a user-supplied Nintendo image. That is intentionally kept separate from the first source-adapter step.
+SameBoy itself contains open boot-ROM source, so a later integration may switch to a reproducibly built SameBoy boot ROM instead of requiring a user-supplied Nintendo image. That remains separate from the first source-adapter step.
 
 ## Optional live SDL2 viewer
 
@@ -164,11 +170,23 @@ cmake --build build/emulator-live
   --clock sync
 ```
 
-Viewer controls:
+### Game Boy controls
+
+When the clock menu is closed:
+
+- arrow keys: D-pad;
+- `Z`: A;
+- `X`: B;
+- `Backspace`: Select;
+- `Enter`: Start.
+
+All Game Boy keys are released automatically when the SDL window loses focus or when the clock menu opens, preventing stuck inputs.
+
+### Viewer controls
 
 - `M`: open/close the clock menu;
 - `Up` / `Down`: choose `STOCK` or `SYNC` while the menu is open;
-- `Enter`: apply the highlighted clock mode;
+- `Enter`: apply the highlighted clock mode while the menu is open;
 - `C`: toggle `STOCK`/`SYNC` immediately;
 - `Space`: pause/resume;
 - `Esc`: close the menu, or quit when the menu is closed;
@@ -224,6 +242,6 @@ Pinky/Visual2C02-derived tests and NESdev documentation are useful independent r
 
 1. dependency-free build, tests, and `STOCK`/`SYNC` execution;
 2. SDL2 viewer compilation and core tests;
-3. pinned SameBoy library/link integration and core tests.
+3. pinned SameBoy static-library/link integration and core tests.
 
-A green core build is the minimum requirement for emulator changes. SameBoy and SDL2 remain optional for end users, but their integration is checked automatically so optional code does not silently rot.
+The three paths are currently expected to remain green before emulator changes are considered integrated. SameBoy and SDL2 remain optional for end users, but their integration is checked automatically so optional code does not silently rot.
