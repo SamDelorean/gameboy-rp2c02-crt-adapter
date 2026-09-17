@@ -358,27 +358,90 @@ No NES CPU, CHR graphics, nametables, OAM or sprites are required. The PPU is a 
 
 ## Software philosophy
 
-### SET — SameBoy is the Game Boy implementation for the virtual bench
+### SET — SameBoy remains the intact host emulator
 
-For emulator/virtual-bench work, reuse SameBoy as far as practical for **all Game Boy behavior**: CPU, memory, cartridge handling, LCD/PPU behavior, frame timing, joypad and normal reference rendering. The project should not create a second Game Boy emulator beside SameBoy.
+For the virtual bench, **SameBoy is the application**, not merely a stripped Game Boy library to rebuild around.
 
-Project-owned emulator code should concentrate on the alternate video path:
+Preserve SameBoy's existing behavior and frontend as far as practical:
+
+- ROM loading and cartridge handling;
+- CPU/memory/LCD emulation;
+- normal Game Boy reference rendering;
+- audio;
+- keyboard/controller input;
+- menus and OSD;
+- pause/reset;
+- save-state and other ordinary SameBoy facilities unless a specific incompatibility is discovered.
+
+The project adds a second video capability to SameBoy rather than replacing its normal output path:
 
 ```text
-SameBoy Game Boy core
-    -> final Game Boy pixel/shade information
-    -> project scaler + border composition
-    -> RP2C02 EXT/palette/timing model
-    -> alternate CRT-path visualization
+                         +-> SameBoy normal display
+SameBoy Game Boy state --|
+                         +-> project black-box adapter
+                              -> scaler + border
+                              -> RP2C02 EXT/palette/timing model
+                              -> alternate video display
 ```
 
-The current frame-level integration is therefore a valid primary implementation, not a temporary shortcut that must eventually be replaced by a home-grown Game Boy video engine.
+The intended desktop presentation is a comparison mode with both outputs visible side by side. SameBoy's existing UI remains the basis for ordinary emulator controls; project-owned UI should add only the controls that are specific to the alternate output.
+
+### SET — The standalone `emulator/` program is a regression bench, not the final frontend
+
+The dependency-free / library-backed program already under `emulator/` remains useful for automated testing of:
+
+- scaler geometry;
+- borders;
+- RP2C02 palette behavior;
+- timing;
+- palette mapping;
+- generated smoke-ROM tests.
+
+It must not drive the architecture toward a separate replacement frontend. New user-facing work should preferentially extend SameBoy itself.
+
+### SET — The virtual bridge is deliberately a black box
+
+The emulator does **not** emulate Arduino/RP2350 implementation details, PIO, DMA, electrical levels, debounce or P14/P15 transport timing.
+
+Its logical contract is only:
+
+```text
+input:
+  160x144 four-shade Game Boy image
+  optional SGB palette already decoded by SameBoy
+
+black box:
+  fixed geometry conversion
+  side-border generation
+  palette mapping
+
+output:
+  EXT indices + RP2C02 palette state
+```
+
+The physical implementation may later change from RP2350 to discrete/period logic without requiring the virtual bench architecture to change.
+
+### SET — SameBoy owns SGB protocol interpretation in the emulator
+
+For virtual SGB operation, reuse SameBoy's SGB implementation and consume its effective palette state. Do not emulate P14/P15/JOYP transport in the main desktop video path.
+
+The project's signal-level SGB decoder remains only a hardware/firmware validation asset for the optional physical SGB-lite implementation.
+
+### SET — One virtual palette control mirrors the hardware UI
+
+The added frontend needs only one project-specific palette action:
+
+```text
+AUTO/SGB -> manual preset 1 -> ... -> manual preset N -> AUTO/SGB
+```
+
+A key binding and/or a small on-screen button may trigger that action. It is a logical UI command, not a simulation of the physical button electronics.
 
 ### SET — Signal-level validation must reuse or minimally extend SameBoy
 
 Exact `LD0/LD1/CP/CPL/ST/S`-style validation is optional diagnostic work, not part of the main rendering path.
 
-If signal-level validation becomes useful, prefer SameBoy's existing SFC/SNES integration hooks (`GB_set_icd_pixel_callback`, `GB_set_icd_hreset_callback`, `GB_set_icd_vreset_callback`) or a small, maintainable SameBoy hook extension. Do **not** independently reimplement the Game Boy LCD/PPU state machine merely to obtain those signals.
+If signal-level validation becomes useful, prefer SameBoy's existing integration hooks or a small, maintainable SameBoy hook extension. Do **not** independently reimplement the Game Boy LCD/PPU state machine merely to obtain those signals.
 
 ### SET — Keep source, framebuffer, scaler, border and palette separable
 
