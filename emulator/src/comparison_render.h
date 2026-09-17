@@ -10,6 +10,12 @@
 #define COMPARISON_W 1280
 #define COMPARISON_H 720
 
+/* Logical-canvas hitbox for the one-button palette control. */
+#define COMPARISON_PALETTE_BUTTON_X 900
+#define COMPARISON_PALETTE_BUTTON_Y 8
+#define COMPARISON_PALETTE_BUTTON_W 190
+#define COMPARISON_PALETTE_BUTTON_H 32
+
 typedef struct {
     gbcrt_clock_mode_t clock_mode;
     gbcrt_source_model_t source_model;
@@ -19,6 +25,8 @@ typedef struct {
     const char *source_name;
     const char *palette_name;
 } comparison_view_state_t;
+
+int comparison_palette_button_contains(unsigned x, unsigned y);
 
 void comparison_render(rgb8_t *canvas,
                        const gb_source_frame_t *frame,
