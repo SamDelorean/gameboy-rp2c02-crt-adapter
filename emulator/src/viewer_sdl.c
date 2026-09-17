@@ -1,3 +1,4 @@
+#include "adapter_palette.h"
 #include "bridge.h"
 #include "clock_mode.h"
 #include "comparison_render.h"
@@ -54,15 +55,6 @@ static int create_source(gb_source_t *source,
     }
 
     return gb_source_pattern_create(source);
-}
-
-static void init_demo_palette(rp2c02_ext_t *ppu)
-{
-    rp2c02_ext_reset(ppu);
-    rp2c02_ext_write_palette(ppu, 0, 0x0f);
-    rp2c02_ext_write_palette(ppu, 1, 0x09);
-    rp2c02_ext_write_palette(ppu, 2, 0x19);
-    rp2c02_ext_write_palette(ppu, 3, 0x29);
 }
 
 static void apply_clock_mode(gbcrt_clock_scheduler_t *scheduler,
@@ -170,7 +162,11 @@ int main(int argc, char **argv)
     }
 
     rp2c02_ext_t ppu;
-    init_demo_palette(&ppu);
+    rp2c02_ext_reset(&ppu);
+    unsigned palette_index = 0u;
+    int palette_pending = -1;
+    adapter_palette_apply(&ppu, palette_index);
+    const adapter_palette_preset_t *palette = adapter_palette_get(palette_index);
 
     gb_source_frame_t frame;
     memset(&frame, 0, sizeof(frame));
@@ -199,6 +195,7 @@ int main(int argc, char **argv)
         .menu_selection = (int)clock_mode,
         .paused = 0,
         .source_name = source.ops && source.ops->name ? source.ops->name : "source",
+        .palette_name = palette ? palette->name : "unknown",
     };
 
     int running = 1;
@@ -240,6 +237,9 @@ int main(int argc, char **argv)
                         GBCRT_CLOCK_SYNC : GBCRT_CLOCK_STOCK;
                     apply_clock_mode(&scheduler, &view, next);
                 }
+                else if (key == SDLK_p) {
+                    palette_pending = (int)((palette_index + 1u) % adapter_palette_count());
+                }
                 else if (view.menu_open &&
                          (key == SDLK_UP || key == SDLK_DOWN ||
                           key == SDLK_1 || key == SDLK_2)) {
@@ -272,6 +272,19 @@ int main(int argc, char **argv)
 
         if (!running) break;
 
+        /*
+         * Apply requested palette changes once at the comparison-frame
+         * boundary.  This is the virtual-bench counterpart of committing PPU
+         * palette writes during the hardware VBlank-safe interval.
+         */
+        if (palette_pending >= 0) {
+            palette_index = (unsigned)palette_pending;
+            palette_pending = -1;
+            adapter_palette_apply(&ppu, palette_index);
+            palette = adapter_palette_get(palette_index);
+            view.palette_name = palette ? palette->name : "unknown";
+        }
+
         if (!view.paused && !first_present) {
             if (gbcrt_clock_scheduler_step(&scheduler)) {
                 if (gb_source_next_frame(&source, &frame) != 0) {
@@ -282,14 +295,15 @@ int main(int argc, char **argv)
         }
         first_present = 0;
 
-        bridge_scale_frame(frame.shade, ext, 0u);
+        bridge_scale_frame(frame.shade, ext, BRIDGE_BORDER_EXT_INDEX);
         comparison_render(canvas, &frame, ext, &ppu, &view);
 
-        char title[256];
+        char title[320];
         snprintf(title, sizeof(title),
-                 "GB reference | RP2C02 EXT — %s — %s — GB frame %llu — output %llu — repeats %llu",
+                 "GB reference | RP2C02 EXT — %s — %s — %s — GB frame %llu — output %llu — repeats %llu",
                  view.source_name,
                  gbcrt_clock_mode_name(view.clock_mode),
+                 view.palette_name ? view.palette_name : "palette",
                  (unsigned long long)frame.frame_number,
                  scheduler.output_frames,
                  scheduler.repeated_output_frames);
@@ -304,8 +318,9 @@ int main(int argc, char **argv)
 
     release_all_game_keys(&source);
 
-    printf("viewer stopped: mode=%s output=%llu source=%llu repeats=%llu\n",
+    printf("viewer stopped: mode=%s palette=%s output=%llu source=%llu repeats=%llu\n",
            gbcrt_clock_mode_name(view.clock_mode),
+           view.palette_name ? view.palette_name : "unknown",
            scheduler.output_frames,
            scheduler.source_frames,
            scheduler.repeated_output_frames);
