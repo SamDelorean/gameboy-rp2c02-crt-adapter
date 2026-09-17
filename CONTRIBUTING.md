@@ -1,40 +1,62 @@
 # Contributing
 
-This project is currently in the architecture/prototype phase. Contributions are welcome, especially when they improve reproducibility or replace assumptions with measurements.
+The current public milestone is the **hybrid software proof of concept**. Contributions that improve reproducibility, correctness, portability, or documentation are welcome.
 
-## Useful contribution areas
+## Software PoC contributions
 
-- RP2C02 and clone-PPU EXT-mode measurements,
-- DMG LCD timing captures,
-- RP2040/RP2350/ESP32 deterministic-I/O experiments,
-- clock-generator calculations,
-- schematic review,
-- composite-output measurements,
-- PPU palette quantization,
-- SGB packet decoding,
-- PCB layout,
+Useful areas include:
+
+- SameBoy integration fixes;
+- RP2C02/NESEmu backend fixes;
+- bridge/scaling regression tests;
+- SDL2 viewer usability;
+- build/bootstrap portability;
+- clock-model validation;
+- SGB global-palette translation;
 - documentation corrections.
+
+The virtual bench intentionally does **not** emulate Arduino/RP2350, PIO, DMA, GPIO, debounce, or P14/P15 electrical transport.
+
+## Physical-hardware research
+
+Hardware contributions are welcome as a separate future track, especially when they replace assumptions with measurements:
+
+- RP2C02/clone EXT-mode captures;
+- Game Boy LCD timing captures;
+- clock-generator measurements;
+- voltage/loading measurements;
+- composite-output captures;
+- schematic/PCB review.
+
+Do not present emulator agreement or an untested replacement PPU as proof of physical compatibility.
 
 ## Evidence labels
 
-When contributing technical information, clearly distinguish between:
+When contributing technical claims, distinguish among:
 
-- **confirmed on hardware**,
-- **confirmed from primary/reference documentation**,
-- **simulation only**,
+- **confirmed on hardware**;
+- **confirmed from primary/reference documentation**;
+- **validated by emulator/software test only**;
 - **hypothesis / proposed implementation**.
 
-Do not present an untested clone PPU as compatible merely because it is marketed as an NES/Famicom replacement.
+## Scope discipline
 
-## Design philosophy
+Keep the PoC small:
 
-Version 1 should remain deliberately simple:
+- no second Game Boy emulator;
+- no full NES CPU/APU/cartridge subsystem;
+- no game database;
+- no regional SGB colorization;
+- no graphical SGB borders;
+- no full SGB emulation;
+- no analog NTSC simulation unless it directly serves a future measured-hardware validation task.
 
-- no NES CPU emulation,
-- no unnecessary tile/sprite subsystem,
-- no game database,
-- no regional colorization,
-- no full SGB emulation,
-- no pixel-rate interrupt bit-banging.
+## Licensing
 
-Features that can be added almost entirely in firmware or with a few optional signal taps are preferred over architectural expansion.
+By contributing project-authored material, you agree that it may be distributed under the repository's applicable license for that content category:
+
+- software: MIT;
+- hardware: CERN-OHL-W-2.0;
+- documentation: CC BY-SA 4.0.
+
+See [`LICENSES.md`](LICENSES.md).
