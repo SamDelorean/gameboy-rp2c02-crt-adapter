@@ -17,9 +17,13 @@ typedef struct {
     uint64_t frame_number;
 
     /*
-     * Optional passive SGB-lite result captured from JOYP/P14/P15 traffic.
-     * This metadata belongs to the alternate-output adapter, not to SameBoy's
-     * normal rendered image. A valid palette remains cached across frames.
+     * Optional already-decoded SGB palette supplied by the source core.
+     * The main virtual bench does not emulate P14/P15, JOYP transport,
+     * Arduino/RP2350 firmware, PIO or DMA. SameBoy owns SGB protocol decoding;
+     * project code only maps these RGB555 colors to RP2C02 palette codes.
+     *
+     * sgb_palette_command is 0xff when the source provides effective palette
+     * state without exposing a transport-level command ID.
      */
     bool sgb_palette_valid;
     uint16_t sgb_palette_rgb555[4];
@@ -64,9 +68,12 @@ int gb_source_pattern_create(gb_source_t *source);
 #ifdef GBCRT_ENABLE_SAMEBOY
 /*
  * SameBoy-backed source. ROM and boot ROM are user-supplied files and are
- * never stored in this repository. DMG uses SameBoy's normal framebuffer;
- * SGB uses SameBoy's official SFC/SNES ICD pixel callbacks so the alternate
- * video path receives the raw final 2-bit Game Boy pixel stream directly.
+ * never stored in this repository.
+ *
+ * DMG: use SameBoy's normal framebuffer, recovering the four known DMG shades.
+ * SGB: use SameBoy's HLE SGB state directly: raw 160x144 four-shade image plus
+ * already-decoded effective SGB palette. The project then implements only the
+ * abstract alternate-video bridge to the RP2C02 model.
  */
 int gb_source_sameboy_create_model(gb_source_t *source,
                                    const char *rom_path,
