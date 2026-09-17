@@ -22,7 +22,11 @@ Current role:
 
 Licensing note: the general SameBoy core is distributed under the Expat/MIT-style license in its repository. iOS/HexFiend-specific exceptions are not needed for this project. Any imported or modified SameBoy source must retain the required copyright/license notices.
 
-SameBoy is **not vendored** into this repository. `emulator/scripts/bootstrap_sameboy.sh` clones the pinned upstream commit into the ignored `emulator/third_party/` directory and invokes `make lib`.
+The SameBoy **core is not vendored** into this repository. `emulator/scripts/bootstrap_sameboy.sh` clones the pinned upstream commit into the ignored `emulator/third_party/` directory and builds the static core archive.
+
+Two 256-byte open-source boot ROM images (DMG and SGB) are embedded in `emulator/src/sameboy_bootroms.c`. They are reproducibly compiled from SameBoy's own `BootROMs/dmg_boot.asm` and `BootROMs/sgb_boot.asm` at the pinned revision using RGBDS v1.0.3. They are used only through SameBoy's documented `GB_set_boot_rom_load_callback()` / `GB_load_boot_rom_from_buffer()` frontend API so normal cartridges receive a model-appropriate boot sequence without requiring a proprietary Nintendo boot ROM.
+
+The embedded boot-ROM resources retain SameBoy's copyright notice and Expat license. The complete notice is stored in `emulator/third_party_licenses/SAMEBOY_LICENSE.txt`.
 
 The local adapter in `emulator/src/gb_source_sameboy.c` is project code written against SameBoy's public library API.
 
@@ -73,4 +77,4 @@ Behavioral claims should still be checked against primary/public technical docum
 
 No copyrighted commercial Game Boy ROM images or Nintendo boot ROM images are stored or distributed in this repository. Users supply their own legally obtained ROMs for local testing.
 
-SameBoy also contains open boot-ROM source; a later reproducible integration may build and use that source instead of requiring a separate Nintendo boot ROM image.
+The normal ROM-backed path uses the embedded **open-source SameBoy boot ROMs** described above. `--boot` remains an optional explicit override for validation with another legally obtained compatible boot ROM.
