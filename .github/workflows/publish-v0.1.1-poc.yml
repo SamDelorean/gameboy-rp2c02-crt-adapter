@@ -1,0 +1,50 @@
+name: Publish v0.1.1-poc
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-v0.1.1-poc.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create v0.1.1-poc release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.1.1-poc >/dev/null 2>&1; then
+            echo "v0.1.1-poc already exists; nothing to do."
+            exit 0
+          fi
+
+          cat > /tmp/release-notes.md <<'EOF'
+          Hotfix for normal cartridge startup in the Game Boy -> RP2C02 software proof of concept.
+
+          Fixed:
+          - normal DMG/SGB startup now follows SameBoy's documented boot-ROM callback API;
+          - open-source SameBoy DMG/SGB boot ROMs from the exact pinned SameBoy revision are embedded for normal startup;
+          - --boot is optional and remains only as an explicit override;
+          - the smoke ROM no longer self-unmaps a boot stub with $FF50;
+          - CGB-only cartridges are rejected explicitly in the current DMG/SGB PoC;
+          - SGB regression now runs beyond SameBoy's documented 200-frame HLE intro.
+
+          Unchanged:
+          - SameBoy core remains unmodified at 213a12ce93d66b105a113debd9396306066a7cfc;
+          - scaler, RP2C02 backend, palette logic, and SGB palette abstraction are unchanged.
+
+          Verification:
+          - Hybrid emulator CI run 35290482497 passed core, SDL2, NESEmu, and SameBoy+NESEmu jobs.
+          EOF
+
+          gh release create v0.1.1-poc \
+            --target "$GITHUB_SHA" \
+            --title "v0.1.1-poc — SameBoy cartridge startup hotfix" \
+            --notes-file /tmp/release-notes.md
