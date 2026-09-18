@@ -67,8 +67,9 @@ int gb_source_pattern_create(gb_source_t *source);
 
 #ifdef GBCRT_ENABLE_SAMEBOY
 /*
- * SameBoy-backed source. ROM and boot ROM are user-supplied files and are
- * never stored in this repository.
+ * SameBoy-backed source. The ROM is user-supplied. By default the adapter
+ * uses open-source DMG/SGB boot ROMs compiled from the pinned SameBoy source
+ * revision; boot_rom_path is an optional explicit override.
  *
  * DMG: use SameBoy's normal framebuffer, recovering the four known DMG shades.
  * SGB: use SameBoy's HLE SGB state directly: raw 160x144 four-shade image plus

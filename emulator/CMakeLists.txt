@@ -71,7 +71,9 @@ if(GBCRT_ENABLE_SAMEBOY)
         IMPORTED_LOCATION "${SAMEBOY_LIBRARY}"
         INTERFACE_INCLUDE_DIRECTORIES "${SAMEBOY_ROOT}")
 
-    target_sources(gbcrt_core PRIVATE src/gb_source_sameboy.c)
+    target_sources(gbcrt_core PRIVATE
+        src/gb_source_sameboy.c
+        src/sameboy_bootroms.c)
     target_compile_definitions(gbcrt_core PRIVATE
         GB_INTERNAL=1
         GB_DISABLE_REWIND=1

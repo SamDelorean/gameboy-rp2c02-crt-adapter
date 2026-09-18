@@ -42,7 +42,7 @@ La ventana muestra a la izquierda la referencia normal de SameBoy y a la derecha
 - 16 paletas globales candidatas.
 - Editor interactivo de paleta en SDL2.
 - Soporte SGB limitado a una paleta RGB555 global de cuatro colores ya interpretada por SameBoy.
-- Boot stub y ROM de smoke test escritos para el proyecto.
+- ROM de smoke test escrita para el proyecto y boot ROMs DMG/SGB abiertos de SameBoy para el arranque normal.
 - CI para builds básicos, SDL2, NESEmu y SameBoy+NESEmu.
 
 ## Alcance SGB
@@ -94,11 +94,10 @@ Para ejecutar el visor:
 ./build/poc/gbcrt_viewer \
   --source-model dmg \
   --rom build/poc-smoke/gbcrt_smoke.gb \
-  --boot build/poc-smoke/gbcrt_boot_stub.bin \
   --clock sync
 ```
 
-Se puede sustituir la ROM de prueba por una imagen `.gb` obtenida legalmente. El repositorio no distribuye ROMs comerciales.
+Se puede sustituir la ROM de prueba por una imagen `.gb` obtenida legalmente. La ruta normal DMG/SGB usa los boot ROMs abiertos compilados desde la revisión fijada de SameBoy; `--boot /ruta/boot.bin` queda sólo como override opcional. El repositorio no distribuye ROMs comerciales ni boot ROMs propietarios de Nintendo.
 
 Consulta [`emulator/README.md`](emulator/README.md) para los detalles completos.
 
@@ -133,10 +132,12 @@ El trabajo anterior de RP2350/Arduino-Pico se conserva como prototipo histórico
 
 ## Dependencias
 
-El proyecto fija pero no incorpora dentro del repositorio:
+El proyecto fija pero no incorpora dentro del repositorio los cores completos:
 
 - **SameBoy**
 - **johnmph/NESEmu**
+
+Sí se incluyen dos recursos abiertos de 256 bytes derivados de los boot ROMs DMG/SGB de SameBoy, bajo su licencia Expat.
 
 Consulta [`emulator/THIRD_PARTY.md`](emulator/THIRD_PARTY.md).
 

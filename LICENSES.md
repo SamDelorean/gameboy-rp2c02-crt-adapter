@@ -30,9 +30,11 @@ The complete text is in [`docs/LICENSE`](docs/LICENSE).
 
 ## Third-party projects
 
-SameBoy and johnmph/NESEmu are **not vendored into this repository**. Bootstrap scripts fetch pinned upstream revisions into ignored local directories.
+The SameBoy core and johnmph/NESEmu core are **not vendored into this repository**; bootstrap scripts fetch pinned upstream revisions into ignored local directories.
 
-Those projects remain under their own licenses and copyright notices. See [`emulator/THIRD_PARTY.md`](emulator/THIRD_PARTY.md) for pinned revisions, roles, and license notes.
+The repository does embed two small open-source SameBoy boot-ROM resources (DMG and SGB), compiled from the pinned SameBoy source revision. Those bytes remain under SameBoy's Expat license and copyright notice rather than the project's MIT license. See [`emulator/third_party_licenses/SAMEBOY_LICENSE.txt`](emulator/third_party_licenses/SAMEBOY_LICENSE.txt).
+
+Third-party projects and embedded third-party resources remain under their own licenses and copyright notices. See [`emulator/THIRD_PARTY.md`](emulator/THIRD_PARTY.md) for pinned revisions, roles, and license notes.
 
 No commercial Game Boy ROM, Nintendo boot ROM, or other proprietary game image is distributed by this repository.
 

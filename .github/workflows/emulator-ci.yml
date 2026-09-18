@@ -129,12 +129,39 @@ jobs:
       - name: Generate project-authored smoke ROM
         run: python3 emulator/tests/generate_smoke_rom.py build/emulator-smoke
 
+      - name: Verify smoke ROM does not self-unmap a boot stub
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          rom = Path("build/emulator-smoke/gbcrt_smoke.gb").read_bytes()
+          assert bytes((0xE0, 0x50)) not in rom[0x0150:0x0300]
+          PY
+
+      - name: Reject CGB-only cartridge in DMG PoC mode
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          src = Path("build/emulator-smoke/gbcrt_smoke.gb").read_bytes()
+          rom = bytearray(src)
+          rom[0x143] = 0xC0
+          Path("build/emulator-smoke/gbcrt_cgb_only.gb").write_bytes(rom)
+          PY
+          if ./build/emulator-sameboy/gbcrt_emu \
+            --source-model dmg \
+            --rom build/emulator-smoke/gbcrt_cgb_only.gb \
+            --frames 1 \
+            --out build/emulator-sameboy/cgb-only.ppm \
+            2>build/emulator-sameboy/cgb-only.err; then
+            echo "CGB-only cartridge was unexpectedly accepted"
+            exit 1
+          fi
+          grep -q 'CGB-only' build/emulator-sameboy/cgb-only.err
+
       - name: Execute smoke ROM through SameBoy DMG and alternate video path
         run: |
           ./build/emulator-sameboy/gbcrt_emu \
             --source-model dmg \
             --rom build/emulator-smoke/gbcrt_smoke.gb \
-            --boot build/emulator-smoke/gbcrt_boot_stub.bin \
             --clock sync \
             --frames 12 \
             --out build/emulator-sameboy/smoke-dmg.ppm \
@@ -146,19 +173,19 @@ jobs:
 
       - name: Execute smoke ROM through SameBoy SGB HLE and alternate video path
         run: |
-          # SameBoy HLE intentionally holds the GB CPU during the SGB intro.
-          # Run beyond that interval so the project smoke ROM actually executes,
-          # paints its two-shade checker and sends its PAL01 packet.
+          # SameBoy's pinned Core/sgb.h defines GB_SGB_INTRO_ANIMATION_LENGTH
+          # as 200 frames. Run beyond that documented HLE interval so the
+          # project smoke ROM is visible after the normal SGB boot sequence.
+          # The exact internal palette sequence counter is not a frontend API.
           ./build/emulator-sameboy/gbcrt_emu \
             --source-model sgb \
             --rom build/emulator-smoke/gbcrt_smoke.gb \
-            --boot build/emulator-smoke/gbcrt_boot_stub.bin \
             --clock sync \
-            --frames 130 \
+            --frames 220 \
             --out build/emulator-sameboy/smoke-sgb.ppm \
             | tee build/emulator-sameboy/smoke-sgb.log
           grep -q 'source: SameBoy SGB, model: SGB' build/emulator-sameboy/smoke-sgb.log
-          grep -q 'palette: AUTO/SGB; SGB valid=1 sequence=2' build/emulator-sameboy/smoke-sgb.log
+          grep -q 'palette: AUTO/SGB; SGB valid=1' build/emulator-sameboy/smoke-sgb.log
           python3 emulator/tests/validate_smoke_ppm.py \
             build/emulator-sameboy/smoke-sgb.ppm \
             --allow-uniform-left

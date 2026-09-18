@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Generate a tiny project-authored boot stub and smoke-test ROM.
+"""Generate a tiny project-authored smoke-test ROM.
 
-The files produced by this script contain no Nintendo boot ROM or commercial
-software. They exist only to make the SameBoy-backed alternate-video path and
-SameBoy SGB HLE path executable in CI.
+The ROM contains no Nintendo boot ROM or commercial software. It deliberately
+does not write FF50; CI therefore proves that the SameBoy frontend integration
+loads and executes a model-appropriate boot ROM before cartridge entry.
 """
 
 from __future__ import annotations
@@ -17,14 +17,6 @@ ROM_SIZE = 32 * 1024
 def emit(rom: bytearray, address: int, data: bytes) -> int:
     rom[address : address + len(data)] = data
     return address + len(data)
-
-
-def make_boot_stub() -> bytes:
-    boot = bytearray(0x100)
-    # Reset entry: jump directly to the cartridge entry point. The cartridge
-    # itself disables the boot-ROM mapping through FF50 before configuring LCD.
-    boot[0:3] = bytes((0xC3, 0x00, 0x01))  # JP $0100
-    return bytes(boot)
 
 
 def joyp_write(code: bytearray, value: int) -> None:
@@ -102,8 +94,6 @@ def make_rom() -> bytes:
     # traffic for the alternate-output bench.
     code += bytes((0xF3,))                    # DI
     code += bytes((0x31, 0xFE, 0xFF))        # LD SP,$FFFE
-    code += bytes((0x3E, 0x01))              # LD A,$01
-    code += bytes((0xE0, 0x50))              # LDH ($FF50),A ; unmap boot stub
     code += bytes((0xAF,))                    # XOR A
     code += bytes((0xE0, 0x40))              # LDH ($FF40),A ; LCD off
 
@@ -153,8 +143,8 @@ def make_rom() -> bytes:
     if pc >= 0x0800:
         raise RuntimeError("smoke-test program unexpectedly grew beyond $07FF")
 
-    # Header checksum. The boot stub intentionally does not validate the
-    # Nintendo logo; the checksum is still kept internally consistent.
+    # Header checksum is kept internally consistent. The open SameBoy boot
+    # ROM is responsible for the normal boot sequence and FF50 unmapping.
     checksum = 0
     for value in rom[0x0134:0x014D]:
         checksum = (checksum - value - 1) & 0xFF
@@ -174,13 +164,10 @@ def main() -> None:
     args = parser.parse_args()
 
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    boot_path = args.output_dir / "gbcrt_boot_stub.bin"
     rom_path = args.output_dir / "gbcrt_smoke.gb"
 
-    boot_path.write_bytes(make_boot_stub())
     rom_path.write_bytes(make_rom())
 
-    print(boot_path)
     print(rom_path)
 
 
