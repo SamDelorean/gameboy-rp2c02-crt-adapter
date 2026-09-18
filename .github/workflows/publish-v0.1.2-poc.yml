@@ -1,0 +1,56 @@
+name: Publish v0.1.2-poc
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/publish-v0.1.2-poc.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create v0.1.2-poc release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view v0.1.2-poc >/dev/null 2>&1; then
+            echo "v0.1.2-poc already exists; nothing to do."
+            exit 0
+          fi
+
+          cat > /tmp/release-notes.md <<'EOF'
+          Final software proof-of-concept release for the Game Boy -> RP2C02 CRT adapter virtual bench.
+
+          Final presentation fix:
+          - Game Boy reference is displayed at 480x432, preserving the 160:144 logical shape.
+          - RP2C02 CRT preview is displayed at 576x432, representing the NTSC picture at 4:3.
+          - Both displays use exactly the same visual height.
+          - The CRT preview follows the NESdev 280x240 NTSC picture model (12 side-border samples + 256 active PPU samples + 12 side-border samples).
+
+          Unchanged:
+          - internal adapter raster remains 256x240;
+          - project image composition remains 11 + 234 + 11;
+          - SameBoy core, RP2C02/NESEmu behavior, palettes, clock modes, and SGB handling are unchanged.
+
+          Verification:
+          - Hybrid emulator CI run 35293211190 passed all four jobs on main;
+          - local 9/9 CTest suite passed;
+          - DMG and SGB smoke regressions passed;
+          - AUTO/SGB palette regression passed.
+
+          Project status:
+          - the desktop/software proof of concept is complete;
+          - any future work belongs to physical hardware validation rather than this PoC.
+          EOF
+
+          gh release create v0.1.2-poc \
+            --target "$GITHUB_SHA" \
+            --title "v0.1.2-poc — Final software proof of concept" \
+            --notes-file /tmp/release-notes.md
