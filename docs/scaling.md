@@ -52,6 +52,24 @@ The resulting geometry error is intentionally tiny and is much smaller than stre
 
 The exact appearance on a physical CRT will still depend on that set's horizontal size and overscan adjustments; the digital algorithm remains fixed.
 
+### Virtual-bench physical-proportion preview
+
+The comparison viewer distinguishes the **256x240 active PPU raster** from the **4:3 NTSC picture**. Following the NESdev NTSC/overscan model, the 256 active PPU samples occupy a 280x240 picture once the horizontal side border is included:
+
+```text
+12 side border + 256 active PPU samples + 12 side border = 280 x 240
+280 x 240 NTSC picture -> 4:3 display
+```
+
+For direct visual comparison both displays use the same 432-pixel height:
+
+```text
+Game Boy reference: 480 x 432
+CRT / RP2C02:       576 x 432
+```
+
+This is a **desktop presentation transform only**. The adapter output remains exactly `256x240`, including the project-owned `11 + 234 + 11` composition. No samples are added to the physical scaler, line buffer, or EXT path.
+
 ## Vertical scaler: 144 -> 240
 
 The vertical relationship remains exact:

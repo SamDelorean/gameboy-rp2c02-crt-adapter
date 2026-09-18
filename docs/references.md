@@ -16,6 +16,12 @@ This file tracks the main external technical references used by the project. Cla
 - NESdev — PPU frame timing  
   https://www.nesdev.org/wiki/PPU_frame_timing
 
+- NESdev — Overscan / NTSC picture width and 8:7 pixel aspect ratio
+  https://www.nesdev.org/wiki/Overscan
+
+- NESdev — NTSC video timing
+  https://www.nesdev.org/wiki/NTSC_video
+
 - NESdev — PPU palettes  
   https://www.nesdev.org/wiki/PPU_palettes
 

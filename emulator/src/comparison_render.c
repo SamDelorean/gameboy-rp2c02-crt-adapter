@@ -322,26 +322,20 @@ static void draw_palette_editor(rgb8_t *canvas, const comparison_view_state_t *s
                       74, 586, 1, selected, text);
 }
 
-static void draw_rp2c02_frame(rgb8_t *canvas,
-                              unsigned rx,
-                              unsigned ry,
-                              unsigned scale,
-                              const uint8_t ext[PPU_ACTIVE_H][PPU_ACTIVE_W],
-                              const rp2c02_ext_t *ppu)
+#define CRT_PPU_ACTIVE_W 256u
+#define CRT_PPU_ACTIVE_H 240u
+#define CRT_CLEAN_APERTURE_W 280u
+#define CRT_SIDE_PAD 12u
+#define CRT_PREVIEW_W 576u
+#define CRT_PREVIEW_H 432u
+
+static void render_rp2c02_codes(
+    const uint8_t ext[PPU_ACTIVE_H][PPU_ACTIVE_W],
+    const rp2c02_ext_t *ppu,
+    uint8_t code[PPU_ACTIVE_H][PPU_ACTIVE_W])
 {
 #ifdef GBCRT_ENABLE_NESEMU_PPU
-    uint8_t code[PPU_ACTIVE_H][PPU_ACTIVE_W];
     if (rp2c02_nesemu_render(ext, ppu, code) == 0) {
-        for (unsigned y = 0; y < PPU_ACTIVE_H; ++y) {
-            for (unsigned x = 0; x < PPU_ACTIVE_W; ++x) {
-                rect(canvas,
-                     rx + x * scale,
-                     ry + y * scale,
-                     scale,
-                     scale,
-                     rp2c02_demo_rgb(code[y][x]));
-            }
-        }
         return;
     }
 #endif
@@ -349,31 +343,59 @@ static void draw_rp2c02_frame(rgb8_t *canvas,
     rp2c02_timing_t timing;
     rp2c02_timing_reset(&timing);
 
-    /*
-     * Dependency-free fallback: walk one complete 341x262 rendering-disabled
-     * RP2C02 frame. When the donor PPU is enabled, the preview above is sourced
-     * from johnmph/NESEmu instead and this reduced path remains as a regression
-     * oracle and no-dependency build option.
-     *
-     * Color selection goes through the rendering-disabled hardware rule, not
-     * directly through palette RAM: EXT selects the backdrop palette entry
-     * unless the PPU's v address is still inside $3F00-$3FFF, in which case
-     * the addressed palette entry overrides EXT.
-     */
     for (unsigned i = 0; i < RP2C02_FRAME_DOTS; ++i) {
         const unsigned x = timing.dot;
         const unsigned y = timing.scanline;
         const unsigned events = rp2c02_timing_step(&timing);
 
         if (events & RP2C02_TIMING_VISIBLE_DOT) {
-            const uint8_t code =
+            code[y][x] =
                 rp2c02_ext_rendering_disabled_code(ppu, ext[y][x]);
-            rect(canvas,
-                 rx + x * scale,
-                 ry + y * scale,
-                 scale,
-                 scale,
-                 rp2c02_demo_rgb(code));
+        }
+    }
+}
+
+static void draw_rp2c02_crt_frame(
+    rgb8_t *canvas,
+    unsigned rx,
+    unsigned ry,
+    const uint8_t ext[PPU_ACTIVE_H][PPU_ACTIVE_W],
+    const rp2c02_ext_t *ppu)
+{
+    uint8_t code[PPU_ACTIVE_H][PPU_ACTIVE_W];
+    render_rp2c02_codes(ext, ppu, code);
+
+    /*
+     * Physical-preview presentation, not a change to PPU geometry:
+     *
+     * NESdev's NTSC clean-aperture model pads the 256 active PPU samples with
+     * 12 backdrop/border samples on each side, yielding 280x240.  Presenting
+     * that clean aperture as 4:3 gives 320x240 square-pixel equivalent.
+     *
+     * Here both comparison displays share a 432-pixel height:
+     *   Game Boy reference: 480x432 (160:144)
+     *   CRT preview:        576x432 (4:3)
+     *
+     * The internal adapter raster remains exactly 256x240 and still contains
+     * its own 11 + 234 + 11 composition.  Only the desktop preview changes.
+     */
+    const rgb8_t crt_side_border = {0, 0, 0};
+
+    for (unsigned dy = 0; dy < CRT_PREVIEW_H; ++dy) {
+        const unsigned sy = (dy * CRT_PPU_ACTIVE_H) / CRT_PREVIEW_H;
+
+        for (unsigned dx = 0; dx < CRT_PREVIEW_W; ++dx) {
+            const unsigned clean_x =
+                (dx * CRT_CLEAN_APERTURE_W) / CRT_PREVIEW_W;
+
+            rgb8_t c = crt_side_border;
+            if (clean_x >= CRT_SIDE_PAD &&
+                clean_x < CRT_SIDE_PAD + CRT_PPU_ACTIVE_W) {
+                const unsigned sx = clean_x - CRT_SIDE_PAD;
+                c = rp2c02_demo_rgb(code[sy][sx]);
+            }
+
+            canvas[(size_t)(ry + dy) * COMPARISON_W + (rx + dx)] = c;
         }
     }
 }
@@ -395,22 +417,25 @@ void comparison_render(rgb8_t *canvas,
     fill(canvas, bg);
     draw_menu(canvas, state);
 
-    /* Formal panel regions. The image wells are deliberately framed separately
-       from the surrounding panel so geometry differences remain visually clear. */
-    rect(canvas, 40, 70, 570, 600, panel);
-    rect(canvas, 670, 70, 570, 600, panel);
-    frame_rect(canvas, 40, 70, 570, 600, 4, panel_edge);
-    frame_rect(canvas, 670, 70, 570, 600, 4, panel_edge);
+    /*
+     * Comparison panels deliberately use equal displayed heights. The Game Boy
+     * keeps its logical 160:144 shape; the CRT panel uses a 4:3 NTSC clean
+     * aperture. Only width differs.
+     */
+    rect(canvas, 30, 70, 570, 600, panel);
+    rect(canvas, 640, 70, 610, 600, panel);
+    frame_rect(canvas, 30, 70, 570, 600, 4, panel_edge);
+    frame_rect(canvas, 640, 70, 610, 600, 4, panel_edge);
 
-    rect(canvas, 48, 78, 554, 42, panel_header);
-    rect(canvas, 678, 78, 554, 42, panel_header);
+    rect(canvas, 38, 78, 554, 42, panel_header);
+    rect(canvas, 648, 78, 594, 42, panel_header);
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                      68, 92, 2, "GAME BOY REFERENCE", text);
+                      58, 92, 2, "GAME BOY REFERENCE", text);
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                      700, 92, 2, "RP2C02 EXT PATH", text);
+                      670, 92, 2, "RP2C02 CRT PREVIEW", text);
 
     /* Left source region: 160x144 at exact 3x integer scale = 480x432. */
-    const unsigned lx = 85;
+    const unsigned lx = 75;
     const unsigned ly = 150;
     const unsigned lscale = 3;
     rect(canvas, lx - 6, ly - 6, 492, 444, (rgb8_t){8, 8, 8});
@@ -426,34 +451,40 @@ void comparison_render(rgb8_t *canvas,
         }
     }
 
-    /* Right adapter region: visible 256x240 portion of a 341x262 PPU frame. */
-    const unsigned rx = 699;
-    const unsigned ry = 132;
-    const unsigned rscale = 2;
-    rect(canvas, rx - 6, ry - 6, 524, 492, (rgb8_t){8, 8, 8});
-    frame_rect(canvas, rx - 6, ry - 6, 524, 492, 2, video_edge);
-    draw_rp2c02_frame(canvas, rx, ry, rscale, ext, ppu);
+    /*
+     * Right physical-preview region: 256x240 PPU active samples are embedded
+     * in a 280x240 NTSC clean aperture and displayed as 576x432 (4:3).
+     */
+    const unsigned rx = 657;
+    const unsigned ry = 150;
+    rect(canvas, rx - 6, ry - 6,
+         CRT_PREVIEW_W + 12u, CRT_PREVIEW_H + 12u, (rgb8_t){8, 8, 8});
+    frame_rect(canvas, rx - 6, ry - 6,
+               CRT_PREVIEW_W + 12u, CRT_PREVIEW_H + 12u, 2, video_edge);
+    draw_rp2c02_crt_frame(canvas, rx, ry, ext, ppu);
 
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                      79, 612, 1, "SOURCE REGION 160X144", text);
+                      69, 612, 1, "SOURCE 160X144  DISPLAY 480X432", text);
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                      696, 630, 1, "PPU REGION 256X240  11+234+11", text);
+                      654, 612, 1, "CRT 4:3  DISPLAY 576X432", text);
+    ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
+                      654, 630, 1, "PPU 256X240  NTSC APERTURE 280X240", secondary);
 
     if (state && state->source_name) {
         ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                          79, 635, 1, state->source_name, secondary);
+                          69, 635, 1, state->source_name, secondary);
     }
 
     ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                      79, 652, 1,
+                      69, 652, 1,
                       "ARROWS MOVE  Z A  X B  BKSP SELECT  ENTER START",
                       secondary);
 
     if (state && state->palette_name) {
         ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                          696, 650, 1, "PALETTE", secondary);
+                          654, 650, 1, "PALETTE", secondary);
         ui_font_draw_text(canvas, COMPARISON_W, COMPARISON_H,
-                          760, 650, 1, state->palette_name, text);
+                          718, 650, 1, state->palette_name, text);
     }
 
     draw_palette_editor(canvas, state);
