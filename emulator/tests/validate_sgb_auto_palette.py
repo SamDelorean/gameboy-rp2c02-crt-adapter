@@ -46,8 +46,10 @@ def main() -> None:
     dmg = read_ppm(args.dmg)
     sgb = read_ppm(args.sgb)
 
-    right_dmg = region_bytes(dmg, 699 + 11 * 2, 132, 234 * 2, 480)
-    right_sgb = region_bytes(sgb, 699 + 11 * 2, 132, 234 * 2, 480)
+    # Compare the complete equal-height 4:3 CRT preview. Constant borders are
+    # present in both images and therefore cannot create a false positive.
+    right_dmg = region_bytes(dmg, 657, 150, 576, 432)
+    right_sgb = region_bytes(sgb, 657, 150, 576, 432)
 
     if right_dmg == right_sgb:
         raise SystemExit(

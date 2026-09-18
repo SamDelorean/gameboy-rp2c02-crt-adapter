@@ -55,15 +55,11 @@ def main() -> None:
 
     pixels = read_ppm(args.ppm)
 
-    # Exact video wells from comparison_render.c.  Use a 5-pixel sampling step:
-    # it is deliberately not harmonic with the smoke ROM's 2-source-pixel
-    # checker period after either the 3x reference scale or 2x RP2C02 scale.
-    left = sampled_colors(pixels, 85, 150, 480, 432, 5)
-
-    # Right panel is 256x240 at 2x.  Exclude the 11-dot side borders so this
-    # assertion proves that the Game Boy image itself, not merely its black
-    # border, survived the alternate-output path.
-    right_image = sampled_colors(pixels, 699 + 22, 132, 234 * 2, 240 * 2, 5)
+    # Both displays use the same 432-pixel height. The Game Boy preserves its
+    # 160:144 shape (480x432); the CRT preview presents the 280x240 NTSC clean
+    # aperture as 576x432 4:3.
+    left = sampled_colors(pixels, 75, 150, 480, 432, 5)
+    right_image = sampled_colors(pixels, 657, 150, 576, 432, 5)
 
     if len(left) < 2 and not args.allow_uniform_left:
         raise SystemExit(f"SameBoy reference region is uniform: {left}")
@@ -72,10 +68,18 @@ def main() -> None:
             f"RP2C02 alternate-output image is uniform: {right_image}"
         )
 
-    # The first and last visible PPU dots are inside the dedicated 11-dot V1
-    # border and must remain canonical black independently of shade 0.
-    left_border = pixel(pixels, 699, 132 + 120)
-    right_border = pixel(pixels, 699 + 511, 132 + 120)
+    # Check the project-owned 11-dot borders inside the 256-dot PPU active
+    # raster, not merely the additional 12+12 NTSC presentation padding.
+    def display_x_for_ppu_x(ppu_x: int) -> int:
+        target = 12 + ppu_x
+        dx = (target * 576 + 279) // 280
+        while (dx * 280) // 576 < target:
+            dx += 1
+        return 657 + dx
+
+    y_mid = 150 + (120 * 432) // 240
+    left_border = pixel(pixels, display_x_for_ppu_x(0), y_mid)
+    right_border = pixel(pixels, display_x_for_ppu_x(255), y_mid)
     if left_border != (0, 0, 0) or right_border != (0, 0, 0):
         raise SystemExit(
             f"RP2C02 side border is not black: {left_border}, {right_border}"

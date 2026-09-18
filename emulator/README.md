@@ -30,12 +30,12 @@ The project does **not** emulate a complete NES either. The RP2C02 side uses onl
 
 This division is intentional: if SameBoy or a focused RP2C02 implementation already models a piece of behavior, prefer using it rather than recreating that behavior locally.
 
-The comparison output is designed around a 1280x720 16:9 canvas with two formally framed video regions:
+The comparison output is designed around a 1280x720 16:9 canvas with two formally framed video regions of **equal displayed height**:
 
-- left: **GAME BOY REFERENCE**, the normal SameBoy output;
-- right: **RP2C02 EXT PATH**, the same source image after the project bridge and RP2C02 palette/timing path.
+- left: **GAME BOY REFERENCE**, 480x432, preserving the logical 160:144 Game Boy shape;
+- right: **RP2C02 CRT PREVIEW**, 576x432, representing the NTSC picture at 4:3.
 
-The right panel explicitly identifies the `256x240` PPU region and the `11 + 234 + 11` composition so geometry, centering, duplication patterns and palette differences remain visible rather than hidden by the UI.
+The RP2C02 data path itself remains exactly `256x240` and still contains the project's `11 + 234 + 11` composition. For the desktop physical-proportion preview only, those 256 active PPU samples are placed inside the conventional NES NTSC `280x240` picture model (12 border samples on each side) and that complete picture is displayed as 4:3. This changes only presentation in the comparison window; it does not alter the scaler, EXT stream, palette path, or PPU raster.
 
 ## Current V0.3
 

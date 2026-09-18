@@ -1,5 +1,23 @@
 # Changelog
 
+## v0.1.2-poc — 2026-09-17
+
+### Fixed
+
+- CRT/PPU preview now uses a physically representative NTSC display proportion instead of drawing 256x240 active PPU samples as square pixels.
+- Game Boy and CRT comparison images now have exactly the same displayed height (432 pixels), so their physical proportion difference is visible only in width.
+- Game Boy reference remains 480x432; CRT preview is 576x432 (4:3).
+- The CRT preview follows the NESdev 280x240 NTSC picture model: 12 side-border samples + 256 active PPU samples + 12 side-border samples.
+
+### Unchanged
+
+- Internal adapter geometry remains 160x144 -> 234x240 inside the 256x240 PPU raster with 11+234+11 composition.
+- SameBoy, RP2C02/NESEmu behavior, palettes, clock modes, and SGB handling are unchanged.
+
+### Project status
+
+The software proof-of-concept is considered complete at this release. Future work, if any, belongs to physical hardware validation rather than the desktop PoC.
+
 ## v0.1.1-poc — 2026-09-17
 
 ### Fixed
