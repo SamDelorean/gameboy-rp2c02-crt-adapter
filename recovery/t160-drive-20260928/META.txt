@@ -1,0 +1,5 @@
+path=/home/spc/Projects/gameboy-rp2c02-crt-adapter
+timestamp=2026-09-28T09:26:02-06:00
+head=3c23493e4094cac82b3a3f5d01271fe597bd62f3
+branch=main
+toplevel=/home/spc/Projects/gameboy-rp2c02-crt-adapter

@@ -1,0 +1,19 @@
+diff --git a/docs/project-status.md b/docs/project-status.md
+index 10b2679..7aa2ed2 100644
+--- a/docs/project-status.md
++++ b/docs/project-status.md
+@@ -95,3 +95,14 @@ Do not label an implementation detail or source configuration as finalized/compa
+ - been verified on representative hardware where measurement is required.
+ 
+ The same rule applies to emulator claims: a model or integration is a validation aid, not proof of physical hardware behavior unless it is cross-checked against documentation and bench measurements.
++## T160 — intercambio temporal de archivos por Google Drive (2026-09-25)
++
++Ruta canónica: `/home/spc/GoogleDrive/apit160/temporal-trabajo`.
++
++- Usar esta carpeta como área **temporal** de intercambio cuando copiar un conjunto acotado de archivos de trabajo permita analizarlos con menos llamadas a Commander o con herramientas conectadas a Google Drive.
++- Preferir una subcarpeta por tarea, con sólo los archivos estrictamente necesarios. Los originales locales siguen siendo la fuente de verdad; la copia de Drive nunca sustituye al repositorio, estado local, bitácora ni respaldo.
++- Mantenerla limpia: al cerrar una tarea, retirar únicamente los archivos/subcarpetas temporales de esa tarea y comprobar que no queden residuos. No borrar material de otras tareas ni archivos permanentes de Drive.
++- No subir ROMs, dumps, firmware propietario/derivado, proyectos Ghidra que incorporen firmware, credenciales OAuth, tokens, cookies, claves, secretos ni otros datos restringidos. Si una tarea exige una excepción, requiere autorización expresa del usuario.
++- Drive no forma parte de la ruta crítica: si no está disponible, continuar con operaciones agrupadas de Commander sin bloquear el trabajo.
++- El uso de esta carpeta no autoriza por sí mismo commits, pushes, publicación, cambios de alcance ni borrados de fuentes originales.
++
