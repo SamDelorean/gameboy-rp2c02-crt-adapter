@@ -10,88 +10,131 @@ An earlier accidentally named repository beginning with a leading hyphen is **no
 
 ## Current phase
 
-**Current work is centered on the hybrid virtual bench: SameBoy source, project scaler/palette bridge, and RP2C02 preview. Physical controller implementation is deferred from the emulator architecture.**
+The **desktop/software proof of concept is complete**.
 
-Earlier RP2350/Pico 2 and Arduino-Pico work is retained as historical prototype material, but it is not a current emulator requirement and must not drive the SGB palette path.
+Final software release:
 
-A separate `emulator/` virtual-bench path now exists in the same repository. Emulator V0.2 contains the project scaler/bridge, a reduced RP2C02 EXT/palette model, a 16:9 side-by-side comparison renderer, a pluggable Game Boy source interface, and an optional SameBoy-backed ROM source. The dependency-free build and geometry/source tests have been exercised locally; real linking/running against a locally built SameBoy library remains to be verified on a machine with the dependency available.
+`v0.1.2-poc — Final software proof of concept`
 
-## Compatibility target
-
-The project is planned as a **Game Boy DMG / SGB** video adapter.
-
-DMG is the first reference platform for electrical validation. SGB/SGB-CPU-compatible source hardware is an explicit planned compatibility target and should use the same downstream framebuffer, scaler, border, palette and RP2C02 output path wherever the equivalent Game Boy video signals are accessible.
-
-For the current emulator path, SGB contributes only an already-decoded global palette from SameBoy; P14/P15 transport is not emulated.
-
-See [`source-compatibility.md`](source-compatibility.md).
-
-## Decisions already consolidated
-
-- RP2C02-class NTSC PPU architecture retained.
-- Game Boy DMG / SGB source compatibility is an explicit architecture target.
-- **RP2350 selected as the V1 controller family; Raspberry Pi Pico 2 is the preferred prototype module.**
-- Arduino-Pico prototype work is historical/superseded for the current virtual-bench architecture.
-- PIO + DMA retained for timing-critical Game Boy capture and EXT output.
-- Direct Game Boy LCD/video capture retained.
-- V0.2 theoretical PIO/DMA capture engine implemented; bench timing validation remains pending.
-- Aspect-correct presentation fixed at 234x240 image inside 256x240, with 11-dot side borders.
-- Ping-pong full-frame buffering retained.
-- Common clock reference retained.
-- V0.1 central interconnect fixed around Game Boy DMG/SGB -> Pico 2/RP2350 -> RP2C02.
-- Minimized write-only PPU host interface retained: R/W fixed LOW, A1/A2 tied, EXT0..EXT3 shared with D0..D3, passive reset.
-- Manual global palettes retained; a 16-preset candidate catalog is implemented in the virtual bench and awaits visual review before hardware freeze.
-- SGB support in the virtual bench is limited to SameBoy-provided global palette state plus RGB555-to-RP2C02 translation.
-- One-button manual override of SGB-derived palettes retained.
-- Border generator separated logically from the scaler; black fixed for version 1.
-- Clone PPU support treated as test-based compatibility.
-- Hybrid emulator / virtual bench added under `emulator/`.
-- SameBoy selected as the first optional Game Boy execution/source core for side-by-side comparison.
-- Complete NES emulation remains out of scope for the virtual bench; the project owns a reduced RP2C02 EXT/palette model instead.
-
-## Decisions still open
-
-- final common clock-generator IC and its measured output conditioning,
-- final voltage-level/interface components where bench measurements require them,
-- exact physical DMG clock cut/injection point for the selected donor revision,
-- exact SGB/SGB-CPU source configurations and signal-access points to validate,
-- exact prototype PPU revision/device,
-- final EXT-output PIO/DMA timing implementation after RP2C02 timing validation,
-- final visual approval/freeze of the implemented 16-preset candidate palette table,
-- final mixed-license declaration,
-- production schematic and PCB,
-- final interactive emulator frontend implementation,
-- signal-level SameBoy callback integration for LCD-timing experiments.
-
-The SGB external-clock replacement principle itself is not open; only its exact board-revision implementation and electrical validation remain to be documented.
-
-## Emulator validation status
-
-Current virtual-bench state:
+The release proves the hybrid path:
 
 ```text
-pattern source -> 160x144 four-shade frame
-              -> project bridge
-              -> 234x240 + 11/11 border
-              -> reduced RP2C02 EXT/palette model
-              -> 1280x720 comparison image
+SameBoy
+  -> four logical Game Boy shades
+  -> project scaler / bridge
+  -> 234x240 image + 11/11 project borders
+  -> RP2C02 EXT / palette path
+  -> pinned Ricoh2C02 preview backend
+  -> SDL2 comparison viewer
 ```
 
-Optional SameBoy path:
+Any future work belongs to a separate **physical-hardware validation phase**. The completed software PoC should not be reopened merely to pursue unmeasured hardware assumptions.
+
+## Final software architecture
+
+- SameBoy is the Game Boy source of truth; the project does not maintain a second Game Boy emulator.
+- SameBoy remains pinned at `213a12ce93d66b105a113debd9396306066a7cfc`.
+- The SameBoy core is unmodified; the project integrates through its public API.
+- Normal DMG/SGB cartridge startup follows SameBoy's documented boot-ROM callback API.
+- Open-source SameBoy DMG/SGB boot ROM resources are embedded from the same pinned revision.
+- `--boot` remains only as an explicit override.
+- CGB-only cartridges are rejected explicitly because the PoC target is DMG/SGB.
+- The project bridge scales `160x144 -> 234x240`.
+- The RP2C02 active raster remains `256x240` with fixed project composition `11 + 234 + 11`.
+- The preferred RP2C02 preview uses the pinned Ricoh2C02 implementation from johnmph/NESEmu; the reduced project model remains a regression oracle.
+- Manual palette support consists of 16 global candidate presets plus `AUTO/SGB`.
+- SameBoy-provided SGB palette state is limited to one decoded four-color RGB555 palette.
+- The virtual bench does **not** emulate P14/P15/JOYP transport, regional attributes, graphical borders, tile transfers, game identification, or full SGB behavior.
+- The physical-design buffering criterion is a **minimal two-line working buffer/register**. Earlier full-frame ping-pong framebuffer descriptions are historical and are not a current architectural requirement.
+
+## Final comparison-view geometry
+
+The viewer deliberately compares the two outputs at the same displayed height:
+
+- Game Boy reference: `480x432`, preserving the logical `160:144` shape.
+- CRT / RP2C02 preview: `576x432`, representing a 4:3 NTSC picture.
+
+For physical-proportion preview only, the desktop renderer uses the NES NTSC `280x240` picture model:
 
 ```text
-SameBoy DMG core
-   -> normal framebuffer -----------------> left reference
-   -> four-shade recovery -> bridge/PPU --> right comparison
+12 side-border samples + 256 active PPU samples + 12 side-border samples
+= 280x240
 ```
 
-Current automated checks cover the 160->234 horizontal mapping, 144->240 vertical mapping, 11/11 borders, and the source abstraction. SameBoy dependency bootstrap and adapter code are present; end-to-end ROM execution with the linked upstream library is the next validation step.
+This is a presentation transform only. It does not change the adapter raster, scaler, EXT data, palette path, or physical buffer requirements.
+
+## Validation status
+
+Final software validation is complete:
+
+- local CTest suite: **9/9 PASS**;
+- DMG smoke path: **PASS**;
+- SGB smoke path: **PASS** beyond SameBoy's documented 200-frame HLE intro interval;
+- AUTO/SGB palette-difference regression: **PASS**;
+- donor RP2C02/NESEmu path: **PASS**;
+- SDL2 viewer build: **PASS**;
+- CGB-only compatibility rejection: **PASS**;
+- normal cartridge startup validated after replacing the project smoke boot stub with the proper SameBoy boot-ROM callback integration;
+- final `main` CI run `35293211190`: **4/4 jobs green**.
+
+At final release, the repository had 0 open PRs and 0 open software issues.
+
+## Licensing
+
+The release licensing model is final:
+
+- software: **MIT**;
+- hardware: **CERN-OHL-W-2.0**;
+- documentation: **CC BY-SA 4.0**.
+
+Third-party components and embedded third-party resources retain their own license notices.
+
+## Physical design status
+
+The software PoC does **not** claim physical validation.
+
+The following are future hardware tasks only if the project is reopened:
+
+- validate RP2C02 / compatible-clone EXT0..EXT3 behavior on a real bench;
+- validate the common-clock generator and output conditioning;
+- validate Game Boy clock injection on the chosen donor revision;
+- validate Game Boy LCD signal capture and electrical loading;
+- validate voltage-level adaptation;
+- validate composite output and CRT behavior;
+- validate physical SGB source compatibility;
+- freeze production schematics / PCB only after measurements.
+
+The historical RP2350/Pico 2 and Arduino-Pico work remains reference/prototype material rather than a requirement of the completed desktop PoC.
 
 ## Publication rule
 
-Do not label an implementation detail or source configuration as finalized/compatible until it has either:
+Do not label an implementation detail or hardware configuration as finalized/compatible until it has either:
 
 - been explicitly selected as a project decision, or
 - been verified on representative hardware where measurement is required.
 
-The same rule applies to emulator claims: a model or integration is a validation aid, not proof of physical hardware behavior unless it is cross-checked against documentation and bench measurements.
+An emulator or software model is evidence and a validation aid; it is not proof of physical hardware behavior unless cross-checked against documentation and bench measurements.
+
+## Backup state
+
+The project Drive structure is organized under `Game Boy CRT Driver - RP2C02`.
+
+The final backup snapshot created on 2026-11-18 is stored under:
+
+`06_Cierre_Final_v0.1.2-poc`
+
+It contains snapshots of the canonical project documents plus a master closeout/status document. GitHub remains the canonical source for code and public technical history.
+
+## T160 — temporary file exchange through Google Drive
+
+Canonical temporary path:
+
+`/home/spc/GoogleDrive/apit160/temporal-trabajo`
+
+- Use this folder only as a **temporary** exchange area when copying a small, task-specific set of working files materially reduces remote-tool overhead.
+- Prefer one subfolder per task and copy only the files that are strictly necessary.
+- Local originals remain the source of truth; the Drive copy never replaces the repository, local state, bitácora, or backup.
+- Keep the temporary area clean when a task is closed, removing only that task's files/subfolders.
+- Do not upload ROMs, dumps, proprietary/derived firmware, Ghidra projects containing firmware, OAuth credentials, tokens, cookies, keys, secrets, or other restricted material without explicit authorization.
+- Drive is not part of the critical path. If unavailable, continue with grouped remote operations rather than blocking the task.
+- Use of this temporary area does not authorize commits, pushes, publication, scope expansion, or deletion of original sources.
